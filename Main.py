@@ -1,21 +1,27 @@
-import discord
 import os
+import discord
 from discord.ext import commands
-from keep_alive import keep_alive  # 👉 Kích hoạt Flask server
+from keep_alive import keep_alive
+import openai
 
-# Lấy token từ biến môi trường
-TOKEN = os.getenv("DISCORD_TOKEN")  
+# Lấy token bot Discord và API key OpenAI từ biến môi trường Render
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+
+# Cấu hình OpenAI
+openai.api_key = OPENAI_KEY
+
+# Biến lưu trạng thái chat GPT cho từng user
+active_gpt_users = set()
 
 # Intents
 intents = discord.Intents.default()
 intents.message_content = True
 
+# Bot
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# 👉 Gọi hàm giữ bot sống
-keep_alive()
-
-# Từ khoá trigger
+# Từ khóa trigger
 TRIGGER_WORDS = [
     "hack android", "hack ios", "client android", "client ios",
     "executor android", "executor ios", "delta", "krnl"
@@ -23,7 +29,7 @@ TRIGGER_WORDS = [
 
 @bot.event
 async def on_ready():
-    print(f"✅ Bot đã đăng nhập với tên: {bot.user}")
+    print(f"✅ Bot đã đăng nhập: {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -31,11 +37,42 @@ async def on_message(message):
         return
 
     content = message.content.lower()
+
+    # 1️⃣ Bắt đầu chat GPT khi gọi
+    if "chat gpt ơi" in content:
+        active_gpt_users.add(message.author.id)
+        await message.reply("🤖 Xin chào! Bạn muốn hỏi gì?")
+        return
+
+    # 2️⃣ Dừng chat GPT khi nói tạm biệt
+    if "tạm biệt" in content:
+        if message.author.id in active_gpt_users:
+            active_gpt_users.remove(message.author.id)
+            await message.reply("👋 Tạm biệt! Khi nào cần thì gọi mình nha.")
+        return
+
+    # 3️⃣ Nếu đang bật chế độ GPT, trả lời bằng ChatGPT
+    if message.author.id in active_gpt_users:
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Bạn là ChatGPT, trả lời ngắn gọn, dễ hiểu."},
+                    {"role": "user", "content": content}
+                ]
+            )
+            reply = response.choices[0].message["content"]
+            await message.reply(reply)
+        except Exception as e:
+            await message.reply(f"⚠️ Lỗi: {e}")
+        return
+
+    # 4️⃣ Trigger Words
     if any(keyword in content for keyword in TRIGGER_WORDS):
         embed = discord.Embed(
             title="📌 Cách tải và client hỗ trợ",
             description=(
-                "**Nếu bạn không biết cách tải thì đây nha**\n"
+     "**Nếu bạn không biết cách tải thì đây nha**\n"
                 "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"
                 "---------------------\n"
                 "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"
@@ -59,27 +96,15 @@ async def on_message(message):
             color=discord.Color.blue()
         )
         await message.reply(embed=embed)
+        return
 
     await bot.process_commands(message)
 
-@bot.command()
-async def script(ctx):
-    await ctx.send(
-        "🔗 Đây là script bạn cần:\n```lua\nloadstring(game:HttpGet('https://raw.githubusercontent.com/Therealtobu/Applehub/refs/heads/main/Applehubcuatobu.lua'))()\n```"
-    )
-
-@bot.command()
-async def rule(ctx):
-    await ctx.send(
-        "📜 Quy tắc sử dụng bot:\n"
-        "1. Không spam lệnh\n"
-        "2. Không chia sẻ mã độc\n"
-        "3. Tôn trọng người khác\n"
-        "4. Sử dụng đúng mục đích hỗ trợ"
-    )
+# Khởi động web server keep_alive
+keep_alive()
 
 # Chạy bot
-if TOKEN is None:
-    print("❌ Lỗi: Bạn chưa đặt biến môi trường DISCORD_TOKEN")
+if not DISCORD_TOKEN:
+    print("❌ Lỗi: Chưa đặt DISCORD_TOKEN trong Environment Variables của Render")
 else:
-    bot.run(TOKEN)
+    bot.run(DISCORD_TOKEN)
