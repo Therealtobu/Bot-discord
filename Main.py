@@ -2,17 +2,9 @@ import os
 import discord
 from discord.ext import commands
 from keep_alive import keep_alive
-import openai
 
-# Lấy token bot Discord và API key OpenAI từ biến môi trường Render
+# Lấy token bot Discord từ biến môi trường Render
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-
-# Cấu hình OpenAI
-openai.api_key = OPENAI_KEY
-
-# Biến lưu trạng thái chat GPT cho từng user
-active_gpt_users = set()
 
 # Intents
 intents = discord.Intents.default()
@@ -38,41 +30,12 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    # 1️⃣ Bắt đầu chat GPT khi gọi
-    if "chat gpt ơi" in content:
-        active_gpt_users.add(message.author.id)
-        await message.reply("🤖 Xin chào! Bạn muốn hỏi gì?")
-        return
-
-    # 2️⃣ Dừng chat GPT khi nói tạm biệt
-    if "tạm biệt" in content:
-        if message.author.id in active_gpt_users:
-            active_gpt_users.remove(message.author.id)
-            await message.reply("👋 Tạm biệt! Khi nào cần thì gọi mình nha.")
-        return
-
-    # 3️⃣ Nếu đang bật chế độ GPT, trả lời bằng ChatGPT
-    if message.author.id in active_gpt_users:
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Bạn là ChatGPT, trả lời ngắn gọn, dễ hiểu."},
-                    {"role": "user", "content": content}
-                ]
-            )
-            reply = response.choices[0].message["content"]
-            await message.reply(reply)
-        except Exception as e:
-            await message.reply(f"⚠️ Lỗi: {e}")
-        return
-
-    # 4️⃣ Trigger Words
+    # Nếu phát hiện trigger word → trả lời embed
     if any(keyword in content for keyword in TRIGGER_WORDS):
         embed = discord.Embed(
             title="📌 Cách tải và client hỗ trợ",
             description=(
-     "**Nếu bạn không biết cách tải thì đây nha**\n"
+                "**Nếu bạn không biết cách tải thì đây nha**\n"
                 "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"
                 "---------------------\n"
                 "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"
@@ -87,7 +50,7 @@ async def on_message(message):
                 "**Đối với Android**\n"
                 "---------------------\n"
                 "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
-                "📥 𝗙𝗶𝗹𝗲 𝗟𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
                 "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"
                 "---------------------\n"
                 "✨ **Chúc bạn một ngày vui vẻ**\n"
