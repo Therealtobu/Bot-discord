@@ -2,24 +2,41 @@ import os
 import discord
 from discord.ext import commands
 from keep_alive import keep_alive
+import random
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Verify Config
 ROLE_ID = 1400724722714542111  # Role Verify của bạn
-CHANNEL_ID = 1400732340677771356  # Channel gửi nút Verify
+VERIFY_CHANNEL_ID = 1400732340677771356  # Channel gửi nút Verify
+
+# Ticket Config
+GUILD_ID = 1372215595218505891  # Server ID
+TICKET_CHANNEL_ID = 1400750812912685056  # Channel gửi nút Ticket (bạn cần đổi)
+SUPPORTERS = ["__tobu", "caycotbietmua"]
+
+# Trigger Words
+TRIGGER_WORDS = [
+    "hack", "hack android", "hack ios",
+    "client android", "client ios",
+    "executor android", "executor ios",
+    "delta", "krnl"
+]
 
 # Intents
 intents = discord.Intents.default()
 intents.members = True
+intents.presences = True
 intents.message_content = True
 
 # Bot
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 # -------------------------
-# Nút Verify
+# Verify Button
 # -------------------------
 class VerifyButton(discord.ui.View):
     def __init__(self):
@@ -37,34 +54,98 @@ class VerifyButton(discord.ui.View):
             await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
 # -------------------------
-# Từ khóa trigger (đã thêm "hack")
+# Ticket Buttons
 # -------------------------
-TRIGGER_WORDS = [
-    "hack", "hack android", "hack ios",
-    "client android", "client ios",
-    "executor android", "executor ios",
-    "delta", "krnl"
-]
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
+        await interaction.channel.delete()
+
+class CreateTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = bot.get_guild(GUILD_ID)
+        supporters_online = []
+
+        # Kiểm tra supporter nào online
+        for member in guild.members:
+            if member.name in SUPPORTERS and member.status != discord.Status.offline:
+                supporters_online.append(member)
+
+        if not supporters_online:
+            await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
+            return
+
+        # Chọn ngẫu nhiên supporter đang online
+        supporter = random.choice(supporters_online)
+
+        await interaction.response.send_message(
+            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
+            ephemeral=True
+        )
+
+        # Tạo kênh ticket riêng
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
+        ticket_channel = await guild.create_text_channel(
+            f"ticket-{interaction.user.name}",
+            overwrites=overwrites
+        )
+
+        # Gửi tin nhắn vào ticket
+        embed = discord.Embed(
+            title="🎫 Ticket Hỗ Trợ",
+            description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
+            color=discord.Color.blue()
+        )
+        await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
 # -------------------------
-# Sự kiện khi bot online
+# On Ready
 # -------------------------
 @bot.event
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    # Gửi nút Verify vào channel
-    channel = bot.get_channel(CHANNEL_ID)
-    if channel:
+    # Gửi Verify Message
+    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
+    if verify_channel:
         embed = discord.Embed(
             title="Xác Thực Thành Viên",
             description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
             color=discord.Color.green()
         )
-        await channel.send(embed=embed, view=VerifyButton())
+        await verify_channel.send(embed=embed, view=VerifyButton())
+
+    # Gửi Ticket Message
+    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
+    if ticket_channel:
+        embed = discord.Embed(
+            title="📢 Hỗ Trợ",
+            description=(
+                "Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                "---------------------\n"
+                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**."
+            ),
+            color=discord.Color.orange()
+        )
+        await ticket_channel.send(embed=embed, view=CreateTicketView())
 
 # -------------------------
-# Xử lý tin nhắn trigger
+# On Message (Trigger)
 # -------------------------
 @bot.event
 async def on_message(message):
@@ -73,7 +154,6 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    # Điều kiện: có "có" + có "không" hoặc "ko" + có từ khóa trigger
     if (
         "có" in content
         and ("không" in content or "ko" in content)
@@ -91,7 +171,7 @@ async def on_message(message):
                 "---------------------\n"
                 "**Đối với IOS**\n"
                 "---------------------\n"
-                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/2trqggnmde0kqix/KrnlxVNG+V11.ipa/file)\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
                 "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
                 "---------------------\n"
                 "**Đối với Android**\n"
@@ -111,7 +191,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # -------------------------
-# Chạy bot
+# Run Bot
 # -------------------------
 keep_alive()
 
