@@ -1,29 +1,39 @@
 import os
+import re
+import random
+import requests
 import discord
 from discord.ext import commands
 from keep_alive import keep_alive
-import random
 
-# -------------------------
+# =========================
 # Cấu hình bot
-# -------------------------
+# =========================
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Verify Config
-ROLE_ID = 1400724722714542111  # Role Verify của bạn
-VERIFY_CHANNEL_ID = 1400732340677771356  # Channel gửi nút Verify
+ROLE_ID = 1400724722714542111  # Role Verify
+VERIFY_CHANNEL_ID = 1400732340677771356  # Kênh gửi nút Verify
 
 # Ticket Config
-GUILD_ID = 1372215595218505891  # Server ID
-TICKET_CHANNEL_ID = 1400750812912685056  # Channel gửi nút Ticket (bạn cần đổi)
+GUILD_ID = 1372215595218505891
+TICKET_CHANNEL_ID = 1400750812912685056
 SUPPORTERS = ["__tobu", "caycotbietmua"]
 
-# Trigger Words
+# Từ khóa trigger
 TRIGGER_WORDS = [
     "hack", "hack android", "hack ios",
     "client android", "client ios",
     "executor android", "executor ios",
     "delta", "krnl"
+]
+
+# Domain cần bypass
+BYPASS_DOMAINS = [
+    "bit.ly", "tinyurl.com", "is.gd", "t.co", "cutt.ly",
+    "linkvertise.com", "loot-link.com", "lootlabs.io",
+    "boost.ink", "rekonise.com", "sub2unlock.com", "mboost.me",
+    "yeumoney.com", "123link.co", "megaurl.in", "ouo.io", "shorten.asia"
 ]
 
 # Intents
@@ -35,9 +45,9 @@ intents.message_content = True
 # Bot
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# -------------------------
-# Verify Button
-# -------------------------
+# =========================
+# Nút Verify
+# =========================
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -46,16 +56,15 @@ class VerifyButton(discord.ui.View):
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(ROLE_ID)
         member = interaction.user
-
         if role in member.roles:
             await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
         else:
             await member.add_roles(role)
             await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
-# -------------------------
-# Ticket Buttons
-# -------------------------
+# =========================
+# Nút Ticket
+# =========================
 class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -72,26 +81,18 @@ class CreateTicketView(discord.ui.View):
     @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = bot.get_guild(GUILD_ID)
-        supporters_online = []
-
-        # Kiểm tra supporter nào online
-        for member in guild.members:
-            if member.name in SUPPORTERS and member.status != discord.Status.offline:
-                supporters_online.append(member)
+        supporters_online = [m for m in guild.members if m.name in SUPPORTERS and m.status != discord.Status.offline]
 
         if not supporters_online:
             await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
             return
 
-        # Chọn ngẫu nhiên supporter đang online
         supporter = random.choice(supporters_online)
-
         await interaction.response.send_message(
             f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
             ephemeral=True
         )
 
-        # Tạo kênh ticket riêng
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
@@ -103,7 +104,6 @@ class CreateTicketView(discord.ui.View):
             overwrites=overwrites
         )
 
-        # Gửi tin nhắn vào ticket
         embed = discord.Embed(
             title="🎫 Ticket Hỗ Trợ",
             description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
@@ -111,14 +111,27 @@ class CreateTicketView(discord.ui.View):
         )
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
-# -------------------------
-# On Ready
-# -------------------------
+# =========================
+# Hàm bypass link
+# =========================
+def bypass_link(url: str) -> str:
+    try:
+        res = requests.get(f"https://bypass.pm/bypass2?url={url}", timeout=10)
+        data = res.json()
+        if data.get("success") and "destination" in data:
+            return data["destination"]
+    except Exception:
+        pass
+    return None
+
+# =========================
+# Sự kiện bot online
+# =========================
 @bot.event
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    # Gửi Verify Message
+    # Gửi nút Verify
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if verify_channel:
         embed = discord.Embed(
@@ -128,7 +141,7 @@ async def on_ready():
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
 
-    # Gửi Ticket Message
+    # Gửi nút Ticket
     ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
     if ticket_channel:
         embed = discord.Embed(
@@ -144,9 +157,9 @@ async def on_ready():
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
 
-# -------------------------
-# On Message (Trigger)
-# -------------------------
+# =========================
+# Lắng nghe tin nhắn
+# =========================
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -154,6 +167,7 @@ async def on_message(message):
 
     content = message.content.lower()
 
+    # 1. Trigger trả lời hack/client
     if (
         "có" in content
         and ("không" in content or "ko" in content)
@@ -170,16 +184,12 @@ async def on_message(message):
                 "**Các client mình đang cóa**\n\n"
                 "---------------------\n"
                 "**Đối với IOS**\n"
-                "---------------------\n"
                 "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
                 "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
-                "---------------------\n"
                 "**Đối với Android**\n"
-                "---------------------\n"
                 "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
                 "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
                 "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"
-                "---------------------\n"
                 "✨ **Chúc bạn một ngày vui vẻ**\n"
                 "*Bot made by: @__tobu*"
             ),
@@ -188,11 +198,21 @@ async def on_message(message):
         await message.reply(embed=embed)
         return
 
+    # 2. Bypass link rút gọn
+    urls = re.findall(r'(https?://\S+)', message.content)
+    for url in urls:
+        if any(domain in url for domain in BYPASS_DOMAINS):
+            real_link = bypass_link(url)
+            if real_link:
+                await message.reply(f"🔍 Link gốc: {real_link}")
+            else:
+                await message.reply("❌ Không thể bypass link này.")
+
     await bot.process_commands(message)
 
-# -------------------------
-# Run Bot
-# -------------------------
+# =========================
+# Chạy bot
+# =========================
 keep_alive()
 
 if not DISCORD_TOKEN:
