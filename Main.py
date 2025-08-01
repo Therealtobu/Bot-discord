@@ -3,17 +3,42 @@ import discord
 from discord.ext import commands
 from keep_alive import keep_alive
 
-# Lấy token bot Discord từ biến môi trường Render
+# -------------------------
+# Cấu hình bot
+# -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+ROLE_ID = 1400724722714542111  # Role Verify của bạn
+CHANNEL_ID = 1400732340677771356  # Channel gửi nút Verify
 
 # Intents
 intents = discord.Intents.default()
+intents.members = True
 intents.message_content = True
 
 # Bot
 bot = commands.Bot(command_prefix="/", intents=intents)
 
+# -------------------------
+# Nút Verify
+# -------------------------
+class VerifyButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(ROLE_ID)
+        member = interaction.user
+
+        if role in member.roles:
+            await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
+        else:
+            await member.add_roles(role)
+            await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
+
+# -------------------------
 # Từ khóa trigger (đã thêm "hack")
+# -------------------------
 TRIGGER_WORDS = [
     "hack", "hack android", "hack ios",
     "client android", "client ios",
@@ -21,10 +46,26 @@ TRIGGER_WORDS = [
     "delta", "krnl"
 ]
 
+# -------------------------
+# Sự kiện khi bot online
+# -------------------------
 @bot.event
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
+    # Gửi nút Verify vào channel
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(
+            title="Xác Thực Thành Viên",
+            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+            color=discord.Color.green()
+        )
+        await channel.send(embed=embed, view=VerifyButton())
+
+# -------------------------
+# Xử lý tin nhắn trigger
+# -------------------------
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -50,7 +91,7 @@ async def on_message(message):
                 "---------------------\n"
                 "**Đối với IOS**\n"
                 "---------------------\n"
-                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/2trqggnmde0kqix/KrnlxVNG+V11.ipa/file)\n"
                 "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
                 "---------------------\n"
                 "**Đối với Android**\n"
@@ -69,10 +110,11 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# Khởi động web server keep_alive
+# -------------------------
+# Chạy bot
+# -------------------------
 keep_alive()
 
-# Chạy bot
 if not DISCORD_TOKEN:
     print("❌ Lỗi: Chưa đặt DISCORD_TOKEN trong Environment Variables của Render")
 else:
