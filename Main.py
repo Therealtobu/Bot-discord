@@ -13,10 +13,12 @@ intents.message_content = True
 # Bot
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# Từ khóa trigger
+# Từ khóa trigger (đã thêm "hack")
 TRIGGER_WORDS = [
-    "hack android", "hack ios", "client android", "client ios",
-    "executor android", "executor ios", "delta", "krnl"
+    "hack", "hack android", "hack ios",
+    "client android", "client ios",
+    "executor android", "executor ios",
+    "delta", "krnl"
 ]
 
 @bot.event
@@ -30,8 +32,12 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    # Nếu phát hiện trigger word → trả lời embed
-    if any(keyword in content for keyword in TRIGGER_WORDS):
+    # Điều kiện: có "có" + có "không" hoặc "ko" + có từ khóa trigger
+    if (
+        "có" in content
+        and ("không" in content or "ko" in content)
+        and any(keyword in content for keyword in TRIGGER_WORDS)
+    ):
         embed = discord.Embed(
             title="📌 Cách tải và client hỗ trợ",
             description=(
