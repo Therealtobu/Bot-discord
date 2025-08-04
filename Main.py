@@ -1,234 +1,213 @@
-import os  
-import discord  
-from discord.ext import commands  
-from keep_alive import keep_alive  
-import random  
-import requests  
-import re  
+import os
+import discord
+from discord.ext import commands
+from keep_alive import keep_alive
+import random
+from linkvertise_bypasser import Bypass
 
-# -------------------------  
-# Cấu hình bot  
-# -------------------------  
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")  
+# -------------------------
+# Cấu hình bot
+# -------------------------
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Verify Config  
-ROLE_ID = 1400724722714542111  
-VERIFY_CHANNEL_ID = 1400732340677771356  
+# Verify Config
+ROLE_ID = 1400724722714542111
+VERIFY_CHANNEL_ID = 1400732340677771356
 
-# Ticket Config  
-GUILD_ID = 1372215595218505891  
-TICKET_CHANNEL_ID = 1400750812912685056  
-SUPPORTERS = ["__tobu", "caycotbietmua"]  
+# Ticket Config
+GUILD_ID = 1372215595218505891
+TICKET_CHANNEL_ID = 1400750812912685056
+SUPPORTERS = ["__tobu", "caycotbietmua"]
 
-# Trigger Words  
-TRIGGER_WORDS = [  
-    "hack", "hack android", "hack ios",  
-    "client android", "client ios",  
-    "executor android", "executor ios",  
-    "delta", "krnl"  
-]  
+# Trigger Words
+TRIGGER_WORDS = [
+    "hack", "hack android", "hack ios",
+    "client android", "client ios",
+    "executor android", "executor ios",
+    "delta", "krnl"
+]
 
-# Intents  
-intents = discord.Intents.default()  
-intents.members = True  
-intents.presences = True  
-intents.message_content = True  
+# Intents
+intents = discord.Intents.default()
+intents.members = True
+intents.presences = True
+intents.message_content = True
 
-bot = commands.Bot(command_prefix="/", intents=intents)  
+bot = commands.Bot(command_prefix="/", intents=intents)
 
-# -------------------------  
-# Verify Button  
-# -------------------------  
-class VerifyButton(discord.ui.View):  
-    def __init__(self):  
-        super().__init__(timeout=None)  
+# -------------------------
+# Verify Button
+# -------------------------
+class VerifyButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)  
-    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):  
-        role = interaction.guild.get_role(ROLE_ID)  
-        member = interaction.user  
+    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(ROLE_ID)
+        member = interaction.user
 
-        if role in member.roles:  
-            await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)  
-        else:  
-            await member.add_roles(role)  
-            await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)  
+        if role in member.roles:
+            await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
+        else:
+            await member.add_roles(role)
+            await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
-# -------------------------  
-# Ticket Buttons  
-# -------------------------  
-class CloseTicketView(discord.ui.View):  
-    def __init__(self):  
-        super().__init__(timeout=None)  
+# -------------------------
+# Ticket Buttons
+# -------------------------
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)  
-    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):  
-        await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)  
-        await interaction.channel.delete()  
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
+        await interaction.channel.delete()
 
-class CreateTicketView(discord.ui.View):  
-    def __init__(self):  
-        super().__init__(timeout=None)  
+class CreateTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)  
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):  
-        guild = bot.get_guild(GUILD_ID)  
-        supporters_online = []  
+    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = bot.get_guild(GUILD_ID)
+        supporters_online = []
 
-        for member in guild.members:  
-            if member.name in SUPPORTERS and member.status != discord.Status.offline:  
-                supporters_online.append(member)  
+        for member in guild.members:
+            if member.name in SUPPORTERS and member.status != discord.Status.offline:
+                supporters_online.append(member)
 
-        if not supporters_online:  
-            await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)  
-            return  
+        if not supporters_online:
+            await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
+            return
 
-        supporter = random.choice(supporters_online)  
+        supporter = random.choice(supporters_online)
 
-        await interaction.response.send_message(  
-            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",  
-            ephemeral=True  
-        )  
+        await interaction.response.send_message(
+            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
+            ephemeral=True
+        )
 
-        overwrites = {  
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),  
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),  
-            supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),  
-            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)  
-        }  
-        ticket_channel = await guild.create_text_channel(  
-            f"ticket-{interaction.user.name}",  
-            overwrites=overwrites  
-        )  
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
+        ticket_channel = await guild.create_text_channel(
+            f"ticket-{interaction.user.name}",
+            overwrites=overwrites
+        )
 
-        embed = discord.Embed(  
-            title="🎫 Ticket Hỗ Trợ",  
-            description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",  
-            color=discord.Color.blue()  
-        )  
-        await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())  
+        embed = discord.Embed(
+            title="🎫 Ticket Hỗ Trợ",
+            description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
+            color=discord.Color.blue()
+        )
+        await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
-# -------------------------  
-# On Ready  
-# -------------------------  
-@bot.event  
-async def on_ready():  
-    print(f"✅ Bot đã đăng nhập: {bot.user}")  
+# -------------------------
+# On Ready
+# -------------------------
+@bot.event
+async def on_ready():
+    print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)  
-    if verify_channel:  
-        embed = discord.Embed(  
-            title="Xác Thực Thành Viên",  
-            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",  
-            color=discord.Color.green()  
-        )  
-        await verify_channel.send(embed=embed, view=VerifyButton())  
+    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
+    if verify_channel:
+        embed = discord.Embed(
+            title="Xác Thực Thành Viên",
+            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+            color=discord.Color.green()
+        )
+        await verify_channel.send(embed=embed, view=VerifyButton())
 
-    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)  
-    if ticket_channel:  
-        embed = discord.Embed(  
-            title="📢 Hỗ Trợ",  
-            description=(  
-                "Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"  
-                "---------------------\n"  
-                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"  
-                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"  
-                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**."  
-            ),  
-            color=discord.Color.orange()  
-        )  
-        await ticket_channel.send(embed=embed, view=CreateTicketView())  
+    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
+    if ticket_channel:
+        embed = discord.Embed(
+            title="📢 Hỗ Trợ",
+            description=(
+                "Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                "---------------------\n"
+                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**."
+            ),
+            color=discord.Color.orange()
+        )
+        await ticket_channel.send(embed=embed, view=CreateTicketView())
 
-# -------------------------  
-# On Message (Trigger + Bypass Link)  
-# -------------------------  
-@bot.event  
-async def on_message(message):  
-    if message.author.bot:  
-        return  
+# -------------------------
+# On Message (Trigger + Bypass Link)
+# -------------------------
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
 
-    content = message.content.lower()  
+    content = message.content.lower()
 
-    # Phát hiện link linkvertise hoặc lootlab  
-    if "http" in content and ("linkvertise" in content or "lootlab" in content):  
-        try:  
-            api_url = f"https://bypass.vip/api/bypass?url={message.content}"  
-            resp = requests.get(api_url, timeout=10)  
+    # Nếu phát hiện link thì bypass
+    if "http" in content:
+        try:
+            bypasser = Bypass()
+            bypassed_link = bypasser.bypass(content)
+            if bypassed_link:
+                embed = discord.Embed(
+                    title="🔓 Link đã bypass thành công",
+                    description=f"**Link gốc:** {message.content}\n\n**Link sau khi bypass:**\n{bypassed_link}",
+                    color=discord.Color.green()
+                )
+                await message.reply(embed=embed)
+                return
+        except Exception as e:
+            await message.reply(f"⚠ Lỗi khi bypass: {e}")
+            return
 
-            # Nếu trả về JSON chuẩn
-            if resp.headers.get("Content-Type", "").startswith("application/json"):
-                data = resp.json()  
-                bypassed_url = data.get("destination") or data.get("bypassed")  
-            else:
-                # Nếu trả về HTML, lọc link thủ công
-                html = resp.text  
-                links = re.findall(r'(https?://[^\s"<]+)', html)  
-                blacklist_ext = (".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg")  
-                bypassed_url = None  
-                for link in links:  
-                    if not link.lower().endswith(blacklist_ext) and "linkvertise" not in link and "lootlab" not in link:  
-                        bypassed_url = link  
-                        break  
+    # Trigger "có ... không"
+    if (
+        "có" in content
+        and ("không" in content or "ko" in content)
+        and any(keyword in content for keyword in TRIGGER_WORDS)
+    ):
+        embed = discord.Embed(
+            title="📌 Cách tải và client hỗ trợ",
+            description=(
+                "**Nếu bạn không biết cách tải thì đây nha**\n"
+                "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"
+                "---------------------\n"
+                "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"
+                "---------------------\n"
+                "**Các client mình đang cóa**\n\n"
+                "---------------------\n"
+                "**Đối với IOS**\n"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
+                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
+                "---------------------\n"
+                "**Đối với Android**\n"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"
+                "---------------------\n"
+                "✨ **Chúc bạn một ngày vui vẻ**\n"
+                "*Bot made by: @__tobu*"
+            ),
+            color=discord.Color.blue()
+        )
+        await message.reply(embed=embed)
+        return
 
-            if bypassed_url:  
-                embed = discord.Embed(  
-                    title="🔓 Link đã bypass thành công",  
-                    description=f"**Link gốc:** {message.content}\n\n**Link sau khi bypass:**\n{bypassed_url}",  
-                    color=discord.Color.green()  
-                )  
-                embed.set_footer(text="Bypass by bypass.vip | Bot by __tobu")  
-                await message.reply(embed=embed)  
-            else:  
-                await message.reply("❌ Không thể tìm thấy link sau khi bypass.")  
+    await bot.process_commands(message)
 
-        except Exception as e:  
-            await message.reply(f"⚠ Lỗi khi bypass: `{e}`")  
+# -------------------------
+# Run Bot
+# -------------------------
+keep_alive()
 
-        return  
-
-    # Trigger "có ... không"  
-    if (  
-        "có" in content  
-        and ("không" in content or "ko" in content)  
-        and any(keyword in content for keyword in TRIGGER_WORDS)  
-    ):  
-        embed = discord.Embed(  
-            title="📌 Cách tải và client hỗ trợ",  
-            description=(  
-                "**Nếu bạn không biết cách tải thì đây nha**\n"  
-                "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"  
-                "---------------------\n"  
-                "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"  
-                "---------------------\n"  
-                "**Các client mình đang cóa**\n\n"  
-                "---------------------\n"  
-                "**Đối với IOS**\n"  
-                "---------------------\n"  
-                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"  
-                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"  
-                "---------------------\n"  
-                "**Đối với Android**\n"  
-                "---------------------\n"  
-                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"  
-                "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"  
-                "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"  
-                "---------------------\n"  
-                "✨ **Chúc bạn một ngày vui vẻ**\n"  
-                "*Bot made by: @__tobu*"  
-            ),  
-            color=discord.Color.blue()  
-        )  
-        await message.reply(embed=embed)  
-        return  
-
-    await bot.process_commands(message)  
-
-# -------------------------  
-# Run Bot  
-# -------------------------  
-keep_alive()  
-
-if not DISCORD_TOKEN:  
-    print("❌ Lỗi: Chưa đặt DISCORD_TOKEN trong Environment Variables của Render")  
-else:  
+if not DISCORD_TOKEN:
+    print("❌ Lỗi: Chưa đặt DISCORD_TOKEN trong Environment Variables của Render")
+else:
     bot.run(DISCORD_TOKEN)
