@@ -1,9 +1,10 @@
 import os
+import re
+import aiohttp
 import discord
 from discord.ext import commands
 from keep_alive import keep_alive
 import random
-import aiohttp  # Dùng để gọi API bypass.vip
 
 # -------------------------
 # Cấu hình bot
@@ -148,15 +149,18 @@ async def on_message(message):
 
     content = message.content.lower()
 
-    # Nếu là link linkvertise hoặc lootlab → gọi API bypass.vip
+    # -------------------------
+    # Phát hiện linkvertise / lootlab và bypass
+    # -------------------------
     if "http" in content and ("linkvertise" in content or "lootlab" in content):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://bypass.vip/api/bypass?url={message.content}") as resp:
-                    data = await resp.json()
+                async with session.get(f"https://bypass.vip/bypass?url={message.content}") as resp:
+                    html = await resp.text()
 
-            if data.get("success"):
-                bypassed_url = data.get("destination")
+            match = re.search(r'(https?://[^\s"<]+)', html)
+            if match:
+                bypassed_url = match.group(1)
                 embed = discord.Embed(
                     title="🔓 Link đã bypass thành công",
                     description=f"**Link gốc:** {message.content}\n\n**Link sau khi bypass:**\n{bypassed_url}",
@@ -165,12 +169,14 @@ async def on_message(message):
                 embed.set_footer(text="Bypass by bypass.vip | Bot by __tobu")
                 await message.reply(embed=embed)
             else:
-                await message.reply("❌ Không thể bypass link này.")
+                await message.reply("❌ Không thể tìm thấy link sau khi bypass.")
         except Exception as e:
-            await message.reply(f"⚠ Lỗi khi bypass: {e}")
+            await message.reply(f"⚠ Lỗi khi bypass: `{e}`")
         return
 
+    # -------------------------
     # Trigger "có ... không"
+    # -------------------------
     if (
         "có" in content
         and ("không" in content or "ko" in content)
