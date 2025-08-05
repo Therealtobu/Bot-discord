@@ -241,7 +241,27 @@ async def on_message(message):
     ):
         embed = discord.Embed(
             title="📌 Cách tải và client hỗ trợ",
-            description="(Nội dung hướng dẫn tải như cũ...)",
+            description="**Nếu bạn không biết cách tải thì đây nha**\n"
+                "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"
+                "---------------------\n"
+                "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"
+                "---------------------\n"
+                "**Các client mình đang cóa**\n\n"
+                "---------------------\n"
+                "**Đối với IOS**\n"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
+                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
+                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://www.mediafire.com/file/g2opbrfuc7vs1cp/DeltaxVNG+V23.ipa/file?dkey=f2th7l5402u&r=169)\n\n"
+                "---------------------\n"
+                "**Đối với Android**\n"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n"
+                "---------------------\n"
+                "✨ **Chúc bạn một ngày vui vẻ**\n"
+                "*Bot made by: @__tobu*",
             color=discord.Color.blue()
         )
         await message.reply(embed=embed)
