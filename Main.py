@@ -1,27 +1,24 @@
 import os
 import discord
+from discord import app_commands
 from discord.ext import commands
 import random
 from keep_alive import keep_alive
 import asyncio
 import yt_dlp
-import tempfile
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Verify Config
 ROLE_ID = 1400724722714542111
 VERIFY_CHANNEL_ID = 1400732340677771356
 
-# Ticket Config
 GUILD_ID = 1372215595218505891
 TICKET_CHANNEL_ID = 1400750812912685056
 SUPPORTERS = ["__tobu", "caycotbietmua"]
 
-# Trigger Words
 TRIGGER_WORDS = [
     "hack", "hack android", "hack ios",
     "client android", "client ios",
@@ -35,7 +32,7 @@ intents.members = True
 intents.presences = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------------------------
 # Verify Button
@@ -86,9 +83,8 @@ class CreateTicketView(discord.ui.View):
             return
 
         supporter = random.choice(supporters_online)
-
         await interaction.response.send_message(
-            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
+            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn!",
             ephemeral=True
         )
 
@@ -111,16 +107,16 @@ class CreateTicketView(discord.ui.View):
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
 # -------------------------
-# Phát nhạc YouTube
+# Slash Commands Music
 # -------------------------
-@bot.command(name="play")
-async def play(ctx, *, url: str):
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("❌ Bạn cần vào voice channel trước!")
+@bot.tree.command(name="play", description="Phát nhạc từ YouTube")
+async def play(interaction: discord.Interaction, url: str):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ Bạn cần vào voice channel trước!", ephemeral=True)
         return
 
-    voice_channel = ctx.author.voice.channel
-    vc = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    voice_channel = interaction.user.voice.channel
+    vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
     if not vc:
         vc = await voice_channel.connect()
@@ -131,22 +127,23 @@ async def play(ctx, *, url: str):
         audio_url = info['url']
         vc.play(discord.FFmpegPCMAudio(audio_url), after=lambda e: print("Hoàn thành phát nhạc"))
 
-    await ctx.send(f"🎵 Đang phát: **{info['title']}**")
+    await interaction.response.send_message(f"🎵 Đang phát: **{info['title']}**")
 
-@bot.command(name="stop")
-async def stop(ctx):
-    vc = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+@bot.tree.command(name="stop", description="Dừng phát nhạc")
+async def stop(interaction: discord.Interaction):
+    vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
     if vc:
         await vc.disconnect()
-        await ctx.send("⏹ Đã dừng phát nhạc")
+        await interaction.response.send_message("⏹ Đã dừng phát nhạc")
     else:
-        await ctx.send("❌ Bot không ở trong voice channel")
+        await interaction.response.send_message("❌ Bot không ở trong voice channel", ephemeral=True)
 
 # -------------------------
 # On Ready
 # -------------------------
 @bot.event
 async def on_ready():
+    await bot.tree.sync()
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
@@ -162,12 +159,7 @@ async def on_ready():
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
-            description=(
-                "Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
-                "---------------------\n"
-                "LƯU Ý: Không spam nhiều ticket.\n"
-                "Khi tạo ticket thì **nói thẳng vấn đề luôn**."
-            ),
+            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới",
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
@@ -181,7 +173,6 @@ async def on_message(message):
         return
 
     content = message.content.lower()
-
     if (
         "có" in content
         and ("không" in content or "ko" in content)
@@ -198,8 +189,7 @@ async def on_message(message):
                 "**Đối với Android**\n"
                 "📥 Krnl VNG: [Tải](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
                 "📥 File login Delta: [Tải](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
-                "📥 File hack Delta X VNG: [Tải](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"
-                "✨ Chúc bạn một ngày vui vẻ"
+                "📥 File hack Delta X VNG: [Tải](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)"
             ),
             color=discord.Color.blue()
         )
