@@ -1,28 +1,21 @@
 import os
 import discord
 from discord.ext import commands
-import random
 from keep_alive import keep_alive
-import wavelink  # Lavalink music client
+import random
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Lavalink Config
-LAVALINK_HOST = "lavalink.oops.wtf"  # host
-LAVALINK_PORT = 2000
-LAVALINK_PASSWORD = "www.freelavalink.ga"
-LAVALINK_SSL = False
-
 # Verify Config
-ROLE_ID = 1400724722714542111
-VERIFY_CHANNEL_ID = 1400732340677771356
+ROLE_ID = 1400724722714542111  # Role Verify của bạn
+VERIFY_CHANNEL_ID = 1400732340677771356  # Channel gửi nút Verify
 
 # Ticket Config
-GUILD_ID = 1372215595218505891
-TICKET_CHANNEL_ID = 1400750812912685056
+GUILD_ID = 1372215595218505891  # Server ID
+TICKET_CHANNEL_ID = 1400750812912685056  # Channel gửi nút Ticket (bạn cần đổi)
 SUPPORTERS = ["__tobu", "caycotbietmua"]
 
 # Trigger Words
@@ -39,9 +32,8 @@ intents.members = True
 intents.presences = True
 intents.message_content = True
 
-# Bot (prefix không quan trọng vì dùng slash)
-bot = commands.Bot(command_prefix="!", intents=intents)
-
+# Bot
+bot = commands.Bot(command_prefix="/", intents=intents)
 
 # -------------------------
 # Verify Button
@@ -61,7 +53,6 @@ class VerifyButton(discord.ui.View):
             await member.add_roles(role)
             await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
-
 # -------------------------
 # Ticket Buttons
 # -------------------------
@@ -74,7 +65,6 @@ class CloseTicketView(discord.ui.View):
         await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
         await interaction.channel.delete()
 
-
 class CreateTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -84,6 +74,7 @@ class CreateTicketView(discord.ui.View):
         guild = bot.get_guild(GUILD_ID)
         supporters_online = []
 
+        # Kiểm tra supporter nào online
         for member in guild.members:
             if member.name in SUPPORTERS and member.status != discord.Status.offline:
                 supporters_online.append(member)
@@ -92,6 +83,7 @@ class CreateTicketView(discord.ui.View):
             await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
             return
 
+        # Chọn ngẫu nhiên supporter đang online
         supporter = random.choice(supporters_online)
 
         await interaction.response.send_message(
@@ -99,6 +91,7 @@ class CreateTicketView(discord.ui.View):
             ephemeral=True
         )
 
+        # Tạo kênh ticket riêng
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
@@ -110,6 +103,7 @@ class CreateTicketView(discord.ui.View):
             overwrites=overwrites
         )
 
+        # Gửi tin nhắn vào ticket
         embed = discord.Embed(
             title="🎫 Ticket Hỗ Trợ",
             description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
@@ -117,66 +111,11 @@ class CreateTicketView(discord.ui.View):
         )
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
-
-# -------------------------
-# Lệnh Nhạc (Slash Command)
-# -------------------------
-@bot.tree.command(name="play", description="Phát nhạc từ YouTube")
-async def play_slash(interaction: discord.Interaction, search: str):
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("❌ Bạn cần vào kênh voice trước.", ephemeral=True)
-        return
-
-    vc: wavelink.Player = interaction.guild.voice_client or await interaction.user.voice.channel.connect(cls=wavelink.Player)
-    track = await wavelink.YouTubeTrack.search(search, return_first=True)
-    if not track:
-        await interaction.response.send_message("❌ Không tìm thấy bài hát.", ephemeral=True)
-        return
-
-    await vc.play(track)
-    await interaction.response.send_message(f"🎶 Đang phát: **{track.title}**")
-
-
-@bot.tree.command(name="stop", description="Dừng nhạc và rời kênh voice")
-async def stop_slash(interaction: discord.Interaction):
-    if interaction.guild.voice_client:
-        await interaction.guild.voice_client.disconnect()
-        await interaction.response.send_message("⏹ Đã dừng và rời kênh voice.")
-    else:
-        await interaction.response.send_message("❌ Bot không ở trong kênh voice.", ephemeral=True)
-
-
-@bot.tree.command(name="skip", description="Bỏ qua bài hát hiện tại")
-async def skip_slash(interaction: discord.Interaction):
-    if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
-        await interaction.guild.voice_client.stop()
-        await interaction.response.send_message("⏭ Đã bỏ qua bài hát.")
-    else:
-        await interaction.response.send_message("❌ Không có bài hát nào đang phát.", ephemeral=True)
-
-
 # -------------------------
 # On Ready
 # -------------------------
 @bot.event
 async def on_ready():
-    # Kết nối Lavalink
-    await wavelink.NodePool.create_node(
-        bot=bot,
-        host=LAVALINK_HOST,
-        port=LAVALINK_PORT,
-        password=LAVALINK_PASSWORD,
-        https=LAVALINK_SSL
-    )
-    print("🎵 Đã kết nối Lavalink.")
-
-    # Sync slash commands
-    try:
-        await bot.tree.sync()
-        print("✅ Slash commands đã sync.")
-    except Exception as e:
-        print(f"❌ Lỗi sync slash commands: {e}")
-
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
     # Gửi Verify Message
@@ -205,9 +144,8 @@ async def on_ready():
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
 
-
 # -------------------------
-# On Message (Trigger Words)
+# On Message (Trigger)
 # -------------------------
 @bot.event
 async def on_message(message):
@@ -235,7 +173,7 @@ async def on_message(message):
                 "---------------------\n"
                 "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
                 "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
-                "📥 Delta X VNG: [Bấm vào đây để tải về](https://www.mediafire.com/file/g2opbrfuc7vs1cp/DeltaxVNG+V23.ipa/file?dkey=f2th7l5402u&r=169)\n\n"
+                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://www.mediafire.com/file/g2opbrfuc7vs1cp/DeltaxVNG+V23.ipa/file?dkey=f2th7l5402u&r=169)\n\n"
                 "---------------------\n"
                 "**Đối với Android**\n"
                 "---------------------\n"
@@ -252,7 +190,6 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
-
 
 # -------------------------
 # Run Bot
