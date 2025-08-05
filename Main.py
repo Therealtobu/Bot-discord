@@ -10,7 +10,7 @@ import wavelink  # Lavalink music client
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Lavalink Config (bạn đổi thông tin này cho đúng server Lavalink)
+# Lavalink Config
 LAVALINK_HOST = "lavalink.oops.wtf"  # host
 LAVALINK_PORT = 2000
 LAVALINK_PASSWORD = "www.freelavalink.ga"
@@ -39,8 +39,8 @@ intents.members = True
 intents.presences = True
 intents.message_content = True
 
-# Bot
-bot = commands.Bot(command_prefix="/", intents=intents)
+# Bot (prefix không quan trọng vì dùng slash)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 # -------------------------
@@ -119,12 +119,47 @@ class CreateTicketView(discord.ui.View):
 
 
 # -------------------------
+# Lệnh Nhạc (Slash Command)
+# -------------------------
+@bot.tree.command(name="play", description="Phát nhạc từ YouTube")
+async def play_slash(interaction: discord.Interaction, search: str):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ Bạn cần vào kênh voice trước.", ephemeral=True)
+        return
+
+    vc: wavelink.Player = interaction.guild.voice_client or await interaction.user.voice.channel.connect(cls=wavelink.Player)
+    track = await wavelink.YouTubeTrack.search(search, return_first=True)
+    if not track:
+        await interaction.response.send_message("❌ Không tìm thấy bài hát.", ephemeral=True)
+        return
+
+    await vc.play(track)
+    await interaction.response.send_message(f"🎶 Đang phát: **{track.title}**")
+
+
+@bot.tree.command(name="stop", description="Dừng nhạc và rời kênh voice")
+async def stop_slash(interaction: discord.Interaction):
+    if interaction.guild.voice_client:
+        await interaction.guild.voice_client.disconnect()
+        await interaction.response.send_message("⏹ Đã dừng và rời kênh voice.")
+    else:
+        await interaction.response.send_message("❌ Bot không ở trong kênh voice.", ephemeral=True)
+
+
+@bot.tree.command(name="skip", description="Bỏ qua bài hát hiện tại")
+async def skip_slash(interaction: discord.Interaction):
+    if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
+        await interaction.guild.voice_client.stop()
+        await interaction.response.send_message("⏭ Đã bỏ qua bài hát.")
+    else:
+        await interaction.response.send_message("❌ Không có bài hát nào đang phát.", ephemeral=True)
+
+
+# -------------------------
 # On Ready
 # -------------------------
 @bot.event
 async def on_ready():
-    print(f"✅ Bot đã đăng nhập: {bot.user}")
-
     # Kết nối Lavalink
     await wavelink.NodePool.create_node(
         bot=bot,
@@ -134,6 +169,15 @@ async def on_ready():
         https=LAVALINK_SSL
     )
     print("🎵 Đã kết nối Lavalink.")
+
+    # Sync slash commands
+    try:
+        await bot.tree.sync()
+        print("✅ Slash commands đã sync.")
+    except Exception as e:
+        print(f"❌ Lỗi sync slash commands: {e}")
+
+    print(f"✅ Bot đã đăng nhập: {bot.user}")
 
     # Gửi Verify Message
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
@@ -163,36 +207,7 @@ async def on_ready():
 
 
 # -------------------------
-# Lệnh Nhạc (Lavalink)
-# -------------------------
-@bot.command()
-async def play(ctx, *, search: str):
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        return await ctx.send("❌ Bạn cần vào kênh voice trước.")
-
-    vc: wavelink.Player = ctx.voice_client or await ctx.author.voice.channel.connect(cls=wavelink.Player)
-    track = await wavelink.YouTubeTrack.search(search, return_first=True)
-    if not track:
-        return await ctx.send("❌ Không tìm thấy bài hát.")
-
-    await vc.play(track)
-    await ctx.send(f"🎶 Đang phát: **{track.title}**")
-
-@bot.command()
-async def stop(ctx):
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect()
-        await ctx.send("⏹ Đã dừng và rời kênh voice.")
-
-@bot.command()
-async def skip(ctx):
-    if ctx.voice_client and ctx.voice_client.is_playing():
-        await ctx.voice_client.stop()
-        await ctx.send("⏭ Đã bỏ qua bài hát.")
-
-
-# -------------------------
-# On Message (Trigger)
+# On Message (Trigger Words)
 # -------------------------
 @bot.event
 async def on_message(message):
