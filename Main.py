@@ -11,10 +11,10 @@ import wavelink  # Lavalink music client
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Lavalink Config (bạn đổi thông tin này cho đúng server Lavalink)
-LAVALINK_HOST = "lavalink-repl-name.yourusername.repl.co"  # host
-LAVALINK_PORT = 443
-LAVALINK_PASSWORD = "youshallnotpass"
-LAVALINK_SSL = True
+LAVALINK_HOST = "lavalink.oops.wtf"  # host
+LAVALINK_PORT = 2000
+LAVALINK_PASSWORD = "www.freelavalink.ga"
+LAVALINK_SSL = false
 
 # Verify Config
 ROLE_ID = 1400724722714542111
