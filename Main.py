@@ -1,24 +1,31 @@
 import os
 import discord
-from discord import app_commands
 from discord.ext import commands
 import random
 from keep_alive import keep_alive
-import asyncio
-import yt_dlp
+import wavelink  # Lavalink music client
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Lavalink Config (bạn đổi thông tin này cho đúng server Lavalink)
+LAVALINK_HOST = "lavalink-repl-name.yourusername.repl.co"  # host
+LAVALINK_PORT = 443
+LAVALINK_PASSWORD = "youshallnotpass"
+LAVALINK_SSL = True
+
+# Verify Config
 ROLE_ID = 1400724722714542111
 VERIFY_CHANNEL_ID = 1400732340677771356
 
+# Ticket Config
 GUILD_ID = 1372215595218505891
 TICKET_CHANNEL_ID = 1400750812912685056
 SUPPORTERS = ["__tobu", "caycotbietmua"]
 
+# Trigger Words
 TRIGGER_WORDS = [
     "hack", "hack android", "hack ios",
     "client android", "client ios",
@@ -32,7 +39,9 @@ intents.members = True
 intents.presences = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Bot
+bot = commands.Bot(command_prefix="/", intents=intents)
+
 
 # -------------------------
 # Verify Button
@@ -52,6 +61,7 @@ class VerifyButton(discord.ui.View):
             await member.add_roles(role)
             await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
+
 # -------------------------
 # Ticket Buttons
 # -------------------------
@@ -62,8 +72,8 @@ class CloseTicketView(discord.ui.View):
     @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
-        await asyncio.sleep(3)
         await interaction.channel.delete()
+
 
 class CreateTicketView(discord.ui.View):
     def __init__(self):
@@ -83,8 +93,9 @@ class CreateTicketView(discord.ui.View):
             return
 
         supporter = random.choice(supporters_online)
+
         await interaction.response.send_message(
-            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn!",
+            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
             ephemeral=True
         )
 
@@ -106,46 +117,25 @@ class CreateTicketView(discord.ui.View):
         )
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
 
-# -------------------------
-# Slash Commands Music
-# -------------------------
-@bot.tree.command(name="play", description="Phát nhạc từ YouTube")
-async def play(interaction: discord.Interaction, url: str):
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("❌ Bạn cần vào voice channel trước!", ephemeral=True)
-        return
-
-    voice_channel = interaction.user.voice.channel
-    vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
-
-    if not vc:
-        vc = await voice_channel.connect()
-
-    ydl_opts = {"format": "bestaudio/best"}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        audio_url = info['url']
-        vc.play(discord.FFmpegPCMAudio(audio_url), after=lambda e: print("Hoàn thành phát nhạc"))
-
-    await interaction.response.send_message(f"🎵 Đang phát: **{info['title']}**")
-
-@bot.tree.command(name="stop", description="Dừng phát nhạc")
-async def stop(interaction: discord.Interaction):
-    vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
-    if vc:
-        await vc.disconnect()
-        await interaction.response.send_message("⏹ Đã dừng phát nhạc")
-    else:
-        await interaction.response.send_message("❌ Bot không ở trong voice channel", ephemeral=True)
 
 # -------------------------
 # On Ready
 # -------------------------
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
+    # Kết nối Lavalink
+    await wavelink.NodePool.create_node(
+        bot=bot,
+        host=LAVALINK_HOST,
+        port=LAVALINK_PORT,
+        password=LAVALINK_PASSWORD,
+        https=LAVALINK_SSL
+    )
+    print("🎵 Đã kết nối Lavalink.")
+
+    # Gửi Verify Message
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if verify_channel:
         embed = discord.Embed(
@@ -155,14 +145,51 @@ async def on_ready():
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
 
+    # Gửi Ticket Message
     ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
-            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới",
+            description=(
+                "Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                "---------------------\n"
+                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**."
+            ),
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
+
+
+# -------------------------
+# Lệnh Nhạc (Lavalink)
+# -------------------------
+@bot.command()
+async def play(ctx, *, search: str):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        return await ctx.send("❌ Bạn cần vào kênh voice trước.")
+
+    vc: wavelink.Player = ctx.voice_client or await ctx.author.voice.channel.connect(cls=wavelink.Player)
+    track = await wavelink.YouTubeTrack.search(search, return_first=True)
+    if not track:
+        return await ctx.send("❌ Không tìm thấy bài hát.")
+
+    await vc.play(track)
+    await ctx.send(f"🎶 Đang phát: **{track.title}**")
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("⏹ Đã dừng và rời kênh voice.")
+
+@bot.command()
+async def skip(ctx):
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        await ctx.voice_client.stop()
+        await ctx.send("⏭ Đã bỏ qua bài hát.")
+
 
 # -------------------------
 # On Message (Trigger)
@@ -173,6 +200,7 @@ async def on_message(message):
         return
 
     content = message.content.lower()
+
     if (
         "có" in content
         and ("không" in content or "ko" in content)
@@ -183,13 +211,25 @@ async def on_message(message):
             description=(
                 "**Nếu bạn không biết cách tải thì đây nha**\n"
                 "👉 [Bấm vào đây để xem hướng dẫn TikTok](https://vt.tiktok.com/ZSSdjBjVE/)\n\n"
+                "---------------------\n"
+                "**Còn đối với Android thì quá dễ nên mình hok cần phải chỉ nữa**\n"
+                "---------------------\n"
+                "**Các client mình đang cóa**\n\n"
+                "---------------------\n"
                 "**Đối với IOS**\n"
-                "📥 Krnl VNG: [Tải](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
-                "📥 Delta X VNG Fix Lag: [Tải](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm ở đây để tải về](https://www.mediafire.com/file/jfx8ynxsxwgyok1/KrnlxVNG+V10.ipa/file)\n"
+                "📥 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚 𝗙𝗶𝘅 𝗟𝗮𝗴: [Bấm tại đây để tải về](https://www.mediafire.com/file/7hk0mroimozu08b/DeltaxVNG+Fix+Lag+V6.ipa/file)\n\n"
+                "📥 Delta X VNG: [Bấm vào đây để tải về](https://www.mediafire.com/file/g2opbrfuc7vs1cp/DeltaxVNG+V23.ipa/file?dkey=f2th7l5402u&r=169)\n\n"
+                "---------------------\n"
                 "**Đối với Android**\n"
-                "📥 Krnl VNG: [Tải](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
-                "📥 File login Delta: [Tải](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
-                "📥 File hack Delta X VNG: [Tải](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)"
+                "---------------------\n"
+                "📥 𝗞𝗿𝗻𝗹 𝗩𝗡𝗚: [Bấm tại đây để tải về](https://tai.natushare.com/GAMES/Blox_Fruit/Blox_Fruit_Krnl_VNG_2.681_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗹𝗼𝗴𝗶𝗻 𝗗𝗲𝗹𝘁𝗮: [Bấm vào đây để tải về](https://link.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Roblox_VNG_Login_Delta_BANDISHARE.apk)\n"
+                "📥 𝗙𝗶𝗹𝗲 𝗵𝗮𝗰𝗸 𝗗𝗲𝗹𝘁𝗮 𝗫 𝗩𝗡𝗚: [Bấm vào đây để tải về](https://download.nestvui.com/BANDISHARE/GAME/Blox_Fruit/Delta_X_VNG_V65_BANDISHARE.iO.apk)\n\n"
+                "---------------------\n"
+                "✨ **Chúc bạn một ngày vui vẻ**\n"
+                "*Bot made by: @__tobu*"
             ),
             color=discord.Color.blue()
         )
@@ -197,6 +237,7 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
+
 
 # -------------------------
 # Run Bot
