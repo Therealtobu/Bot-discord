@@ -14,7 +14,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 LAVALINK_HOST = "lavalink.oops.wtf"  # host
 LAVALINK_PORT = 2000
 LAVALINK_PASSWORD = "www.freelavalink.ga"
-LAVALINK_SSL = false
+LAVALINK_SSL = False
 
 # Verify Config
 ROLE_ID = 1400724722714542111
