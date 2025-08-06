@@ -1,113 +1,227 @@
-import os import discord from discord.ext import commands from keep_alive import keep_alive import asyncio import random from datetime import datetime, timedelta
+import os
+import discord
+from discord.ext import commands
+import asyncio
+from datetime import datetime, timedelta, timezone
+from keep_alive import keep_alive
+import random
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN") ROLE_ID = 1400724722714542111 VERIFY_CHANNEL_ID = 1400732340677771356 GUILD_ID = 1372215595218505891 TICKET_CHANNEL_ID = 1400750812912685056 SUPPORTERS = ["__tobu", "caycotbietmua"] LOG_CHANNEL_ID = 1402205862985994361
+# -------------------------
+# Cấu hình bot
+# -------------------------
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"] BLOCK_LINKS = ["youtube.com", "facebook.com"] SPAM_LIMIT = 5 TIME_WINDOW = 30 user_messages = {} user_offenses = {}
+# Verify Config
+ROLE_ID = 1400724722714542111
+VERIFY_CHANNEL_ID = 1400732340677771356
 
-intents = discord.Intents.default() intents.members = True intents.presences = True intents.message_content = True bot = commands.Bot(command_prefix="/", intents=intents)
+# Ticket Config
+GUILD_ID = 1372215595218505891
+TICKET_CHANNEL_ID = 1400750812912685056
+SUPPORTERS = ["__tobu", "caycotbietmua"]
 
-class VerifyButton(discord.ui.View): def init(self): super().init(timeout=None)
+# Anti-Spam & Filter Config
+SPAM_LIMIT = 5
+TIME_WINDOW = 30  # giây
+MUTE_TIME = 900  # 15 phút
+MUTE_ROLE_ID = 1402205863510282240
+LOG_CHANNEL_ID = 1402205862985994361
 
-@discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)
-async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-    role = interaction.guild.get_role(ROLE_ID)
-    member = interaction.user
-    if role in member.roles:
-        await interaction.response.send_message("✅ Bạn đã được xác thực!", ephemeral=True)
-    else:
-        await member.add_roles(role)
-        await interaction.response.send_message("🎉 Xác thực thành công!", ephemeral=True)
+user_messages = {}
 
-class CloseTicketView(discord.ui.View): def init(self): super().init(timeout=None)
+# Link bị cấm
+BLOCK_LINKS = ["youtube.com", "facebook.com"]
 
-@discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
-async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-    await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
-    await interaction.channel.delete()
+# Từ cấm
+BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
 
-class CreateTicketView(discord.ui.View): def init(self): super().init(timeout=None)
+# Intents
+intents = discord.Intents.default()
+intents.members = True
+intents.presences = True
+intents.message_content = True
 
-@discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
-async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-    guild = bot.get_guild(GUILD_ID)
-    online_supporters = [m for m in guild.members if m.name in SUPPORTERS and m.status != discord.Status.offline]
-    if not online_supporters:
-        await interaction.response.send_message("❌ Hiện không có supporter online.", ephemeral=True)
+bot = commands.Bot(command_prefix="/", intents=intents)
+
+# -------------------------
+# Verify Button
+# -------------------------
+class VerifyButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(ROLE_ID)
+        member = interaction.user
+
+        if role in member.roles:
+            await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
+        else:
+            await member.add_roles(role)
+            await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
+
+# -------------------------
+# Ticket Buttons
+# -------------------------
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
+        await interaction.channel.delete()
+
+class CreateTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = bot.get_guild(GUILD_ID)
+        supporters_online = []
+
+        for member in guild.members:
+            if member.name in SUPPORTERS and member.status != discord.Status.offline:
+                supporters_online.append(member)
+
+        if not supporters_online:
+            await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
+            return
+
+        supporter = random.choice(supporters_online)
+
+        await interaction.response.send_message(
+            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
+            ephemeral=True
+        )
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
+        ticket_channel = await guild.create_text_channel(
+            f"ticket-{interaction.user.name}",
+            overwrites=overwrites
+        )
+
+        embed = discord.Embed(
+            title="🎫 Ticket Hỗ Trợ",
+            description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
+            color=discord.Color.blue()
+        )
+        await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
+
+# -------------------------
+# On Ready
+# -------------------------
+@bot.event
+async def on_ready():
+    print(f"✅ Bot đã đăng nhập: {bot.user}")
+
+    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
+    if verify_channel:
+        embed = discord.Embed(
+            title="Xác Thực Thành Viên",
+            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+            color=discord.Color.green()
+        )
+        await verify_channel.send(embed=embed, view=VerifyButton())
+
+    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
+    if ticket_channel:
+        embed = discord.Embed(
+            title="📢 Hỗ Trợ",
+            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới.",
+            color=discord.Color.orange()
+        )
+        await ticket_channel.send(embed=embed, view=CreateTicketView())
+
+# -------------------------
+# Mute + Xóa tin nhắn + Log
+# -------------------------
+async def mute_and_log(message, reason="vi phạm"):
+    try:
+        mute_role = message.guild.get_role(MUTE_ROLE_ID)
+        if not mute_role:
+            print("❌ Không tìm thấy role mute!")
+            return
+
+        # Xóa toàn bộ tin nhắn vi phạm trong TIME_WINDOW giây
+        async for msg in message.channel.history(limit=200):
+            if msg.author == message.author and (datetime.now(timezone.utc) - msg.created_at).seconds <= TIME_WINDOW:
+                try:
+                    await msg.delete()
+                except:
+                    pass
+
+        # Mute user
+        await message.author.add_roles(mute_role)
+
+        # Gửi log
+        log_channel = bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel:
+            embed = discord.Embed(
+                title="🚨 Phát hiện vi phạm",
+                description=f"**Người vi phạm:** {message.author.mention}\n**Lý do:** {reason}\n**Thời gian mute:** 15 phút",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="Nội dung", value=message.content or "*Không có nội dung*", inline=False)
+            embed.add_field(name="Kênh", value=message.channel.mention, inline=True)
+            embed.timestamp = datetime.now(timezone.utc)
+            await log_channel.send(embed=embed)
+
+        # Gỡ mute sau MUTE_TIME
+        await asyncio.sleep(MUTE_TIME)
+        await message.author.remove_roles(mute_role)
+
+    except Exception as e:
+        print(f"Lỗi mute_and_log: {e}")
+
+# -------------------------
+# On Message (Filter + Anti-Spam)
+# -------------------------
+@bot.event
+async def on_message(message):
+    if message.author.bot:
         return
-    supporter = random.choice(online_supporters)
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
-    }
-    channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites)
-    embed = discord.Embed(title="🎛 Ticket Hỗ Trợ", description=f"{supporter.mention} sẽ hỗ trợ bạn sớm.", color=discord.Color.blue())
-    await channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
-    await interaction.response.send_message(f"✅ **{supporter.display_name}** sẽ hỗ trợ bạn!", ephemeral=True)
 
-@bot.event async def on_ready(): print(f"✅ Bot đã đăng nhập: {bot.user}") verify_channel = bot.get_channel(VERIFY_CHANNEL_ID) if verify_channel: embed = discord.Embed(title="Xác Thực", description="Bấm để xác thực tham gia server!", color=discord.Color.green()) await verify_channel.send(embed=embed, view=VerifyButton()) ticket_channel = bot.get_channel(TICKET_CHANNEL_ID) if ticket_channel: embed = discord.Embed(title="📢 Hỗ Trợ", description="Bấm để tạo Ticket khi cần!", color=discord.Color.orange()) await ticket_channel.send(embed=embed, view=CreateTicketView())
+    content_lower = message.content.lower()
 
-async def handle_violation(message, reason): try: guild = message.guild user_id = message.author.id
+    # 1. Từ cấm
+    if any(bad_word in content_lower for bad_word in BAD_WORDS):
+        await mute_and_log(message, "dùng từ ngữ tục tĩu")
+        return
 
-# Xóa toàn bộ tin nhắn vi phạm trong TIME_WINDOW
-    async for msg in message.channel.history(limit=100):
-        if msg.author == message.author and (datetime.utcnow() - msg.created_at).total_seconds() <= TIME_WINDOW:
-            try: await msg.delete()
-            except: pass
+    # 2. Link bị cấm
+    if any(block in content_lower for block in BLOCK_LINKS):
+        await mute_and_log(message, "gửi link bị cấm")
+        return
 
-    # Tính mốc mute
-    user_offenses[user_id] = user_offenses.get(user_id, 0) + 1
-    count = user_offenses[user_id]
-    mute_times = {1: 60, 2: 300, 3: 1800, 4: 86400}  # giây
-    duration = mute_times.get(count, 86400)
+    # 3. Anti spam
+    now = datetime.now()
+    uid = message.author.id
+    if uid not in user_messages:
+        user_messages[uid] = []
+    user_messages[uid].append(now)
+    user_messages[uid] = [t for t in user_messages[uid] if now - t < timedelta(seconds=TIME_WINDOW)]
 
-    # Têm vai trò Muted
-    mute_role = discord.utils.get(guild.roles, name="Muted")
-    if mute_role:
-        await message.author.add_roles(mute_role, reason=reason)
+    if len(user_messages[uid]) > SPAM_LIMIT:
+        await mute_and_log(message, "spam tin nhắn")
+        user_messages[uid] = []
+        return
 
-    await message.channel.send(f"⛔ {message.author.mention} bị mute **{duration//60} phút** (Lần {count}) vì {reason}.")
+    await bot.process_commands(message)
 
-    # Log
-    log_channel = bot.get_channel(LOG_CHANNEL_ID)
-    if log_channel:
-        embed = discord.Embed(title="🚨 Vi phạm", color=discord.Color.red())
-        embed.add_field(name="Người vi phạm", value=f"{message.author} ({message.author.mention})")
-        embed.add_field(name="Lý do", value=reason)
-        embed.add_field(name="Lần vi phạm", value=str(count))
-        embed.add_field(name="Mute", value=f"{duration//60} phút")
-        embed.timestamp = datetime.utcnow()
-        await log_channel.send(embed=embed)
+# -------------------------
+# Run Bot
+# -------------------------
+keep_alive()
 
-    await asyncio.sleep(duration)
-    await message.author.remove_roles(mute_role, reason="Auto unmute")
-    await message.channel.send(f"✅ {message.author.mention} đã được gỡ mute!")
-
-except Exception as e:
-    print(f"Lỗi xử lý vi phạm: {e}")
-
-@bot.event async def on_message(message): if message.author.bot: return
-
-content = message.content.lower()
-# 1. Tục từ
-if any(bad in content for bad in BAD_WORDS):
-    await handle_violation(message, "ngôn từ tục tĩu ")
-    return
-# 2. Link bị cấm
-if any(link in content for link in BLOCK_LINKS):
-    await handle_violation(message, "gửi link cấm")
-    return
-# 3. Spam
-now = datetime.now()
-uid = message.author.id
-user_messages.setdefault(uid, []).append(now)
-user_messages[uid] = [t for t in user_messages[uid] if now - t < timedelta(seconds=TIME_WINDOW)]
-if len(user_messages[uid]) > SPAM_LIMIT:
-    await handle_violation(message, "spam tin nhắn")
-    user_messages[uid] = []
-    return
-
-await bot.process_commands(message)
-
-keep_alive() bot.run(DISCORD_TOKEN)
+if not DISCORD_TOKEN:
+    print("❌ Chưa đặt DISCORD_TOKEN")
+else:
+    bot.run(DISCORD_TOKEN)
