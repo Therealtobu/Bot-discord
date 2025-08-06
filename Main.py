@@ -3,7 +3,6 @@ import discord
 from discord.ext import commands, tasks
 import asyncio
 from datetime import datetime, timedelta, timezone
-from keep_alive import keep_alive
 import random
 
 # -------------------------
@@ -38,7 +37,9 @@ LEAVE_CHANNEL_ID = 1402564378569736272
 CARO_CHANNEL_ID = 1402622963823546369
 BOARD_SIZES = {"3x3": 3, "5x5": 5}  # Loại bỏ 7x7 để tránh vượt giới hạn components
 games = {}  # Lưu trạng thái trò chơi caro
+board_messages = {}  # Lưu message_id của tin nhắn bảng caro
 control_messages = {}  # Lưu message_id của tin nhắn chứa nút điều khiển
+selected_board_size = {}  # Lưu kích thước bảng được chọn cho mỗi user
 
 # Link bị cấm
 BLOCK_LINKS = ["youtube.com", "facebook.com"]
@@ -413,7 +414,8 @@ async def on_interaction(interaction: discord.Interaction):
     # Xử lý menu chọn kích thước bảng
     if custom_id == "board_size":
         size = BOARD_SIZES.get(interaction.data.get("values")[0], 5)
-        print(f"🔍 Board size selected: {size}x{size}")
+        selected_board_size[interaction.user.id] = size
+        print(f"🔍 User {interaction.user.name} selected board size: {size}x{size}")
         await interaction.response.defer(ephemeral=True)  # Phản hồi tạm thời để tránh timeout
         return
 
@@ -427,13 +429,8 @@ async def on_interaction(interaction: discord.Interaction):
 
     # Xử lý Caro: Chơi với máy
     elif custom_id == "play_bot":
-        size = 5
-        # Kiểm tra nếu có chọn kích thước từ menu trước đó
-        if interaction.message and interaction.message.components:
-            for component in interaction.message.components:
-                if isinstance(component, discord.ui.Select) and component.custom_id == "board_size":
-                    size = BOARD_SIZES.get(component.values[0], 5) if component.values else 5
-                    print(f"🔍 Board size for play_bot: {size}x{size}")
+        size = selected_board_size.get(interaction.user.id, 5)  # Lấy kích thước đã chọn, mặc định 5x5
+        print(f"🔍 Board size for play_bot: {size}x{size}")
         
         guild = interaction.guild
         overwrites = {
@@ -471,10 +468,11 @@ async def on_interaction(interaction: discord.Interaction):
         control_view.add_item(close_button)
         
         try:
-            await channel.send(embed=embed, view=view)
+            board_message = await channel.send(embed=embed, view=view)
+            board_messages[channel.id] = board_message.id  # Lưu message_id của bảng
             control_message = await channel.send(view=control_view)
             control_messages[channel.id] = control_message.id  # Lưu message_id của control_view
-            print(f"✅ Sent caro board and controls to channel: {channel.name}, control_message_id: {control_message.id}")
+            print(f"✅ Sent caro board (message_id: {board_message.id}) and controls (message_id: {control_message.id}) to channel: {channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
             print(f"❌ Error sending caro board: {e}")
@@ -489,6 +487,8 @@ async def on_interaction(interaction: discord.Interaction):
                     await channel.delete()
                     if channel.id in games:
                         del games[channel.id]
+                    if channel.id in board_messages:
+                        del board_messages[channel.id]
                     if channel.id in control_messages:
                         del control_messages[channel.id]
                 except:
@@ -514,13 +514,8 @@ async def on_interaction(interaction: discord.Interaction):
                 print("❌ Tagged self")
                 return
             
-            size = 5
-            # Kiểm tra nếu có chọn kích thước từ menu trước đó
-            if interaction.message and interaction.message.components:
-                for component in interaction.message.components:
-                    if isinstance(component, discord.ui.Select) and component.custom_id == "board_size":
-                        size = BOARD_SIZES.get(component.values[0], 5) if component.values else 5
-                        print(f"🔍 Board size for play_human: {size}x{size}")
+            size = selected_board_size.get(interaction.user.id, 5)  # Lấy kích thước đã chọn, mặc định 5x5
+            print(f"🔍 Board size for play_human: {size}x{size}")
             
             guild = interaction.guild
             overwrites = {
@@ -559,10 +554,11 @@ async def on_interaction(interaction: discord.Interaction):
             control_view.add_item(close_button)
             
             try:
-                await channel.send(embed=embed, view=view)
+                board_message = await channel.send(embed=embed, view=view)
+                board_messages[channel.id] = board_message.id  # Lưu message_id của bảng
                 control_message = await channel.send(view=control_view)
                 control_messages[channel.id] = control_message.id  # Lưu message_id của control_view
-                print(f"✅ Sent caro board and controls to channel: {channel.name}, control_message_id: {control_message.id}")
+                print(f"✅ Sent caro board (message_id: {board_message.id}) and controls (message_id: {control_message.id}) to channel: {channel.name}")
             except Exception as e:
                 await interaction.followup.send(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
                 print(f"❌ Error sending caro board: {e}")
@@ -577,6 +573,8 @@ async def on_interaction(interaction: discord.Interaction):
                         await channel.delete()
                         if channel.id in games:
                             del games[channel.id]
+                        if channel.id in board_messages:
+                            del board_messages[channel.id]
                         if channel.id in control_messages:
                             del control_messages[channel.id]
                     except:
@@ -632,6 +630,18 @@ async def on_interaction(interaction: discord.Interaction):
             if winner == True:
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"{interaction.user.mention} thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.green())
                 await interaction.response.edit_message(embed=embed, view=view)
+                if channel_id in control_messages:
+                    try:
+                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                        control_view = discord.ui.View()
+                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=True)
+                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=True)
+                        control_view.add_item(replay_button)
+                        control_view.add_item(close_button)
+                        await control_message.edit(view=control_view)
+                        print(f"✅ Disabled control buttons after win in channel: {interaction.channel.name}")
+                    except:
+                        print(f"❌ Error disabling control buttons")
                 print(f"✅ Game ended: {interaction.user.name} wins")
                 if channel_id in games:
                     del games[channel_id]
@@ -639,6 +649,18 @@ async def on_interaction(interaction: discord.Interaction):
             elif winner == "draw":
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
                 await interaction.response.edit_message(embed=embed, view=view)
+                if channel_id in control_messages:
+                    try:
+                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                        control_view = discord.ui.View()
+                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=True)
+                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=True)
+                        control_view.add_item(replay_button)
+                        control_view.add_item(close_button)
+                        await control_message.edit(view=control_view)
+                        print(f"✅ Disabled control buttons after draw in channel: {interaction.channel.name}")
+                    except:
+                        print(f"❌ Error disabling control buttons")
                 print("✅ Game ended: Draw")
                 if channel_id in games:
                     del games[channel_id]
@@ -667,6 +689,18 @@ async def on_interaction(interaction: discord.Interaction):
                     if winner == True:
                         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
                         await interaction.response.edit_message(embed=embed, view=view)
+                        if channel_id in control_messages:
+                            try:
+                                control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                                control_view = discord.ui.View()
+                                close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=True)
+                                replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=True)
+                                control_view.add_item(replay_button)
+                                control_view.add_item(close_button)
+                                await control_message.edit(view=control_view)
+                                print(f"✅ Disabled control buttons after bot win in channel: {interaction.channel.name}")
+                            except:
+                                print(f"❌ Error disabling control buttons")
                         print("✅ Game ended: Bot wins")
                         if channel_id in games:
                             del games[channel_id]
@@ -674,6 +708,18 @@ async def on_interaction(interaction: discord.Interaction):
                     elif winner == "draw":
                         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
                         await interaction.response.edit_message(embed=embed, view=view)
+                        if channel_id in control_messages:
+                            try:
+                                control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                                control_view = discord.ui.View()
+                                close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=True)
+                                replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=True)
+                                control_view.add_item(replay_button)
+                                control_view.add_item(close_button)
+                                await control_message.edit(view=control_view)
+                                print(f"✅ Disabled control buttons after draw in channel: {interaction.channel.name}")
+                            except:
+                                print(f"❌ Error disabling control buttons")
                         print("✅ Game ended: Draw")
                         if channel_id in games:
                             del games[channel_id]
@@ -713,27 +759,31 @@ async def on_interaction(interaction: discord.Interaction):
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
         
-        control_view = discord.ui.View()
-        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
-        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
-        control_view.add_item(replay_button)
-        control_view.add_item(close_button)
-        
         try:
-            await interaction.response.edit_message(embed=embed, view=view)
+            if channel_id in board_messages:
+                board_message = await interaction.channel.fetch_message(board_messages[channel_id])
+                await board_message.edit(embed=embed, view=view)
+                print(f"✅ Renewed board message (message_id: {board_messages[channel_id]}) in channel: {interaction.channel.name}")
+            else:
+                board_message = await interaction.channel.send(embed=embed, view=view)
+                board_messages[channel_id] = board_message.id
+                print(f"✅ Sent new board message (message_id: {board_message.id}) in channel: {interaction.channel.name}")
+            
             if channel_id in control_messages:
                 try:
                     control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                    control_view = discord.ui.View()
+                    close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
+                    replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
+                    control_view.add_item(replay_button)
+                    control_view.add_item(close_button)
                     await control_message.edit(view=control_view)
-                    print(f"✅ Updated control message in channel: {interaction.channel.name}")
+                    print(f"✅ Updated control message (message_id: {control_messages[channel_id]}) in channel: {interaction.channel.name}")
                 except:
                     control_message = await interaction.channel.send(view=control_view)
                     control_messages[channel_id] = control_message.id
-                    print(f"✅ Sent new control message in channel: {interaction.channel.name}, control_message_id: {control_message.id}")
-            else:
-                control_message = await interaction.channel.send(view=control_view)
-                control_messages[channel_id] = control_message.id
-                print(f"✅ Sent new control message in channel: {interaction.channel.name}, control_message_id: {control_message.id}")
+                    print(f"✅ Sent new control message (message_id: {control_message.id}) in channel: {interaction.channel.name}")
+            await interaction.response.defer()  # Phản hồi tạm thời để tránh timeout
             print(f"✅ Game replayed in channel: {interaction.channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi reset bảng caro: {e}", ephemeral=True)
@@ -744,6 +794,8 @@ async def on_interaction(interaction: discord.Interaction):
         channel_id = int(custom_id.split("_")[2])
         if channel_id in games:
             del games[channel_id]
+        if channel_id in board_messages:
+            del board_messages[channel_id]
         if channel_id in control_messages:
             del control_messages[channel_id]
         try:
