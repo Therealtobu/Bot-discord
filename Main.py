@@ -269,20 +269,28 @@ class CreateTicketView(discord.ui.View):
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-caro_channel = bot.get_channel(CARO_CHANNEL_ID)
-if caro_channel:
-    try:
-        await caro_channel.purge(limit=10)
-    except:
-        pass
-    embed = discord.Embed(
-        title="🎮 Chơi Caro",
-        description="Bấm nút để tạo phòng Caro chơi với người khác hoặc bot.",
-        color=discord.Color.blurple()
-    )
-    await caro_channel.send(embed=embed, view=CaroButton(is_caro=True))
+    # Khởi tạo View giữ khi restart bot
+    bot.add_view(CaroMenuView())
+    bot.add_view(VerifyButton())
+    bot.add_view(CreateTicketView())
+    bot.add_view(CloseTicketView())
 
-verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
+    # Gửi menu Caro
+    caro_channel = bot.get_channel(CARO_CHANNEL_ID)
+    if caro_channel:
+        try:
+            await caro_channel.purge(limit=10)
+        except:
+            pass
+        embed = discord.Embed(
+            title="🎮 Chơi Caro",
+            description="Bấm nút để tạo phòng Caro chơi với người khác hoặc bot.",
+            color=discord.Color.blurple()
+        )
+        await caro_channel.send(embed=embed, view=CaroMenuView())
+
+    # Gửi Verify
+    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if verify_channel:
         embed = discord.Embed(
             title="Xác Thực Thành Viên",
@@ -291,15 +299,16 @@ verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
 
+    # Gửi Ticket
     ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
             description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
-                "---------------------\n"
-                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
-                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
-                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
+                        "---------------------\n"
+                        "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                        "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                        "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
