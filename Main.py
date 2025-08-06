@@ -269,42 +269,52 @@ class CreateTicketView(discord.ui.View):
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    # Khởi tạo view
-    bot.add_view(CaroMenuView())
-    bot.add_view(VerifyButton())
-    bot.add_view(CreateTicketView())
-    bot.add_view(CloseTicketView())
+    # Khởi tạo View giữ khi restart bot (persistent view)
+    bot.add_view(CaroMenuView())     # Đã fix thêm custom_id cho các nút bên trong
+    bot.add_view(VerifyButton())     # Đã fix custom_id
+    bot.add_view(CreateTicketView()) # Đã fix custom_id
+    bot.add_view(CloseTicketView())  # Đã fix custom_id
 
-    # Caro
+    # Gửi menu Caro
     caro_channel = bot.get_channel(CARO_CHANNEL_ID)
-    if caro_channel and isinstance(caro_channel, discord.TextChannel):
+    if caro_channel:
         try:
             await caro_channel.purge(limit=10)
-            embed = discord.Embed(
-                title="🎮 Chơi Caro",
-                description="Bấm nút để tạo phòng Caro chơi với người khác hoặc bot.",
-                color=discord.Color.blurple()
-            )
-            await caro_channel.send(embed=embed, view=CaroMenuView())
-        except Exception as e:
-            print(f"❌ Lỗi gửi Caro menu: {e}")
-    else:
-        print("⚠️ Không tìm thấy Caro channel hoặc không phải TextChannel")
+        except:
+            pass
+        embed = discord.Embed(
+            title="🎮 Chơi Caro",
+            description="Bấm nút để tạo phòng Caro chơi với người khác hoặc bot.",
+            color=discord.Color.blurple()
+        )
+        await caro_channel.send(embed=embed, view=CaroMenuView())
 
-    # Verify
+    # Gửi Verify
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
-    if verify_channel and isinstance(verify_channel, discord.TextChannel):
-        try:
-            embed = discord.Embed(
-                title="Xác Thực Thành Viên",
-                description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
-                color=discord.Color.green()
-            )
-            await verify_channel.send(embed=embed, view=VerifyButton())
-        except Exception as e:
-            print(f"❌ Lỗi gửi Verify menu: {e}")
-    else:
-        print("⚠️ Không tìm thấy Verify channel hoặc không phải TextChannel")
+    if verify_channel:
+        embed = discord.Embed(
+            title="Xác Thực Thành Viên",
+            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+            color=discord.Color.green()
+        )
+        await verify_channel.send(embed=embed, view=VerifyButton())
+
+    # Gửi Ticket
+    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
+    if ticket_channel:
+        embed = discord.Embed(
+            title="📢 Hỗ Trợ",
+            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                        "---------------------\n"
+                        "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                        "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                        "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
+            color=discord.Color.orange()
+        )
+        await ticket_channel.send(embed=embed, view=CreateTicketView())
+
+    # Khởi động cập nhật số thành viên
+    update_member_count.start()
 # -------------------------
 # Cập nhật số thành viên & online
 # -------------------------
