@@ -1,6 +1,6 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
 from datetime import datetime, timedelta, timezone
 from keep_alive import keep_alive
@@ -27,10 +27,13 @@ MUTE_TIME = 900  # 15 phút
 MUTE_ROLE_ID = 1402205863510282240
 LOG_CHANNEL_ID = 1402205862985994361
 
+# Voice Channel Hiển Thị Thành Viên
+MEMBER_COUNT_CHANNEL_ID = 1402556153275093024
+
 user_messages = {}
 
 # Link bị cấm
-BLOCK_LINKS = ["youtube.com", "facebook.com"]
+BLOCK_LINKS = ["youtube.com", "facebook.com", "discord.gg ]
 
 # Từ cấm
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
@@ -135,10 +138,35 @@ async def on_ready():
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
-            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới.",
+            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                "---------------------\n"
+                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
+
+    # Khởi động cập nhật số thành viên
+    update_member_count.start()
+
+# -------------------------
+# Cập nhật số thành viên & online
+# -------------------------
+@tasks.loop(minutes=1)
+async def update_member_count():
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+
+    total_members = len([m for m in guild.members if not m.bot and not m.system])
+    online_members = len([m for m in guild.members if not m.bot and not m.system and m.status != discord.Status.offline])
+
+    channel = guild.get_channel(MEMBER_COUNT_CHANNEL_ID)
+    if channel:
+        await channel.edit(name=f"📊 {total_members} thành viên | 🟢 {online_members} online")
+        overwrite = discord.PermissionOverwrite(connect=False, view_channel=True, send_messages=False)
+        await channel.set_permissions(guild.default_role, overwrite=overwrite)
 
 # -------------------------
 # Mute + Xóa tin nhắn + Log
