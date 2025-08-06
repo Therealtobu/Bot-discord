@@ -30,6 +30,10 @@ LOG_CHANNEL_ID = 1402205862985994361
 # Voice Channel Hiển Thị Thành Viên
 MEMBER_COUNT_CHANNEL_ID = 1402556153275093024
 
+# Log Join/Leave
+JOIN_CHANNEL_ID = 1402563416219975791
+LEAVE_CHANNEL_ID = 1402564378569736272
+
 user_messages = {}
 
 # Link bị cấm
@@ -167,6 +171,39 @@ async def update_member_count():
         await channel.edit(name=f"📊 {total_members} thành viên | 🟢 {online_members} online")
         overwrite = discord.PermissionOverwrite(connect=False, view_channel=True, send_messages=False)
         await channel.set_permissions(guild.default_role, overwrite=overwrite)
+
+# -------------------------
+# Thông báo khi có người vào / rời
+# -------------------------
+@bot.event
+async def on_member_join(member):
+    if member.bot or member.system:
+        return
+    channel = bot.get_channel(JOIN_CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(
+            title="👋 Chào mừng thành viên mới!",
+            description=f"Xin chào {member.mention}, chúc bạn vui vẻ trong server!",
+            color=discord.Color.green()
+        )
+        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+        embed.timestamp = datetime.now(timezone.utc)
+        await channel.send(embed=embed)
+
+@bot.event
+async def on_member_remove(member):
+    if member.bot or member.system:
+        return
+    channel = bot.get_channel(LEAVE_CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(
+            title="👋 Tạm biệt!",
+            description=f"Thành viên **{member.name}** đã rời khỏi server.",
+            color=discord.Color.red()
+        )
+        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+        embed.timestamp = datetime.now(timezone.utc)
+        await channel.send(embed=embed)
 
 # -------------------------
 # Mute + Xóa tin nhắn + Log
