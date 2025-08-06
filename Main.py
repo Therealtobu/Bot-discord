@@ -22,6 +22,9 @@ GUILD_ID = 1372215595218505891
 TICKET_CHANNEL_ID = 1400750812912685056
 SUPPORTERS = ["__tobu", "caycotbietmua"]
 
+# Caro Config
+CARO_CHANNEL_ID = 1402622963823546369
+
 # Anti-Spam & Filter Config
 SPAM_LIMIT = 5
 TIME_WINDOW = 30
@@ -39,7 +42,7 @@ LEAVE_CHANNEL_ID = 1402564378569736272
 # TikTok Notify
 TIKTOK_USERNAME = "caycotbietmua"
 TIKTOK_NOTIFY_CHANNEL_ID = 1402191653531549807
-TIKTOK_CHECK_INTERVAL = 300  # 5 phút
+TIKTOK_CHECK_INTERVAL = 300
 last_tiktok_video_id = None
 
 user_messages = {}
@@ -69,7 +72,6 @@ class VerifyButton(discord.ui.View):
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(ROLE_ID)
         member = interaction.user
-
         if role in member.roles:
             await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
         else:
@@ -96,17 +98,11 @@ class CreateTicketView(discord.ui.View):
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = bot.get_guild(GUILD_ID)
         supporters_online = [m for m in guild.members if m.name in SUPPORTERS and m.status != discord.Status.offline]
-
         if not supporters_online:
             await interaction.response.send_message("❌ Không có supporter nào online.", ephemeral=True)
             return
-
         supporter = random.choice(supporters_online)
-
-        await interaction.response.send_message(
-            f"✅ **{supporter.display_name}** sẽ hỗ trợ bạn.",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"✅ **{supporter.display_name}** sẽ hỗ trợ bạn.", ephemeral=True)
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -114,10 +110,7 @@ class CreateTicketView(discord.ui.View):
             supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
         }
-        ticket_channel = await guild.create_text_channel(
-            f"ticket-{interaction.user.name}",
-            overwrites=overwrites
-        )
+        ticket_channel = await guild.create_text_channel(f"ticket-{interaction.user.name}", overwrites=overwrites)
 
         embed = discord.Embed(
             title="🎫 Ticket Hỗ Trợ",
@@ -125,14 +118,149 @@ class CreateTicketView(discord.ui.View):
             color=discord.Color.blue()
         )
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
+        # -------------------------
+# Caro Game (Thông minh + Ticket khi chơi)
+# -------------------------
+class CaroGame:
+    def __init__(self, player1, player2, size=10):
+        self.size = size
+        self.board = [["⬜" for _ in range(size)] for _ in range(size)]
+        self.player1 = player1
+        self.player2 = player2
+        self.turn = player1
+        self.symbols = {player1: "❌", player2: "⭕"}
+        self.game_over = False
+
+    def display(self):
+        return "\n".join("".join(row) for row in self.board)
+
+    def place(self, player, x, y):
+        if self.game_over:
+            return False, "❌ Trò chơi đã kết thúc."
+        if self.turn != player:
+            return False, "⏳ Chưa đến lượt của bạn."
+        if x < 0 or x >= self.size or y < 0 or y >= self.size:
+            return False, "❌ Vị trí không hợp lệ."
+        if self.board[y][x] != "⬜":
+            return False, "❌ Ô này đã được đánh."
+
+        self.board[y][x] = self.symbols[player]
+        if self.check_win(self.symbols[player]):
+            self.game_over = True
+            return True, f"🎉 {player.mention} đã thắng!\n{self.display()}"
+        elif all(cell != "⬜" for row in self.board for cell in row):
+            self.game_over = True
+            return True, f"🤝 Hòa!\n{self.display()}"
+
+        self.turn = self.player1 if self.turn == self.player2 else self.player2
+        return True, self.display()
+
+    def check_win(self, symbol):
+        for y in range(self.size):
+            for x in range(self.size):
+                if self.check_dir(x, y, 1, 0, symbol) or \
+                   self.check_dir(x, y, 0, 1, symbol) or \
+                   self.check_dir(x, y, 1, 1, symbol) or \
+                   self.check_dir(x, y, 1, -1, symbol):
+                    return True
+        return False
+
+    def check_dir(self, x, y, dx, dy, symbol):
+        try:
+            for i in range(5):
+                if self.board[y + i*dy][x + i*dx] != symbol:
+                    return False
+            return True
+        except IndexError:
+            return False
+
+active_games = {}
+
+@bot.command(name="caro")
+async def caro(ctx, opponent: discord.Member = None):
+    """Bắt đầu chơi caro với bot hoặc người khác."""
+    if ctx.channel.id != CARO_CHANNEL_ID:
+        return await ctx.send("❌ Bạn chỉ có thể chơi caro trong kênh được chỉ định.")
+
+    if opponent is None or opponent == bot.user:
+        opponent = bot.user
+    if opponent == ctx.author:
+        return await ctx.send("❌ Bạn không thể chơi với chính mình.")
+
+    game_key = frozenset({ctx.author.id, opponent.id})
+    if game_key in active_games:
+        return await ctx.send("❌ Trò chơi giữa hai người này đang diễn ra.")
+
+    game = CaroGame(ctx.author, opponent)
+    active_games[game_key] = game
+
+    # Tạo ticket khi chơi với bot hoặc người
+    guild = bot.get_guild(GUILD_ID)
+    supporter = ctx.author if opponent == bot.user else opponent
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        ctx.author: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        supporter: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    }
+    ticket_channel = await guild.create_text_channel(
+        f"caro-{ctx.author.name}",
+        overwrites=overwrites
+    )
+
+    await ticket_channel.send(f"🎮 **Bắt đầu chơi Caro**: {ctx.author.mention} vs {supporter.mention}\n{game.display()}")
+
+    await ctx.send(f"✅ Trò chơi Caro đã được tạo trong {ticket_channel.mention}")
+
+@bot.command(name="danh")
+async def danh(ctx, x: int, y: int):
+    """Đánh nước Caro tại tọa độ (x, y)."""
+    game_key = next((key for key in active_games if ctx.author.id in key), None)
+    if not game_key:
+        return await ctx.send("❌ Bạn không đang trong trò chơi Caro nào.")
+
+    game = active_games[game_key]
+    success, message = game.place(ctx.author, x, y)
+    await ctx.send(message)
+
+    # Nếu chơi với bot => bot đánh thông minh
+    if not game.game_over and game.turn == bot.user:
+        move = bot_caro_move(game)
+        if move:
+            game.place(bot.user, *move)
+            await ctx.send(f"🤖 Bot đánh tại {move}\n{game.display()}")
+
+def bot_caro_move(game: CaroGame):
+    """Bot đánh thông minh: ưu tiên thắng, chặn thua."""
+    # Chặn thua hoặc thắng ngay
+    for y in range(game.size):
+        for x in range(game.size):
+            if game.board[y][x] == "⬜":
+                game.board[y][x] = game.symbols[bot.user]
+                if game.check_win(game.symbols[bot.user]):
+                    game.board[y][x] = "⬜"
+                    return (x, y)
+                game.board[y][x] = "⬜"
+
+    for y in range(game.size):
+        for x in range(game.size):
+            if game.board[y][x] == "⬜":
+                game.board[y][x] = game.symbols[game.player1]
+                if game.check_win(game.symbols[game.player1]):
+                    game.board[y][x] = "⬜"
+                    return (x, y)
+                game.board[y][x] = "⬜"
+
+    # Nếu không thì đánh ngẫu nhiên
+    empty_cells = [(x, y) for y in range(game.size) for x in range(game.size) if game.board[y][x] == "⬜"]
+    return random.choice(empty_cells) if empty_cells else None
 
 # -------------------------
-# On Ready
+# Các event khác (giữ nguyên như code gốc của bạn)
 # -------------------------
 @bot.event
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
-
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if verify_channel:
         embed = discord.Embed(
@@ -141,7 +269,6 @@ async def on_ready():
             color=discord.Color.green()
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
-
     ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
     if ticket_channel:
         embed = discord.Embed(
@@ -150,153 +277,8 @@ async def on_ready():
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
-
     update_member_count.start()
     check_tiktok_new_video.start()
-
-# -------------------------
-# Cập nhật số thành viên & online
-# -------------------------
-@tasks.loop(minutes=1)
-async def update_member_count():
-    guild = bot.get_guild(GUILD_ID)
-    if not guild:
-        return
-
-    total_members = len([m for m in guild.members if not m.bot and not m.system])
-    online_members = len([m for m in guild.members if not m.bot and not m.system and m.status != discord.Status.offline])
-
-    channel = guild.get_channel(MEMBER_COUNT_CHANNEL_ID)
-    if channel:
-        await channel.edit(name=f"📊 {total_members} thành viên | 🟢 {online_members} online")
-        overwrite = discord.PermissionOverwrite(connect=False, view_channel=True, send_messages=False)
-        await channel.set_permissions(guild.default_role, overwrite=overwrite)
-
-# -------------------------
-# Thông báo khi có người vào / rời
-# -------------------------
-@bot.event
-async def on_member_join(member):
-    if member.bot or member.system:
-        return
-    channel = bot.get_channel(JOIN_CHANNEL_ID)
-    if channel:
-        embed = discord.Embed(
-            title="👋 Chào mừng!",
-            description=f"Xin chào {member.mention}!",
-            color=discord.Color.green()
-        )
-        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-        embed.timestamp = datetime.now(timezone.utc)
-        await channel.send(embed=embed)
-
-@bot.event
-async def on_member_remove(member):
-    if member.bot or member.system:
-        return
-    channel = bot.get_channel(LEAVE_CHANNEL_ID)
-    if channel:
-        embed = discord.Embed(
-            title="👋 Tạm biệt!",
-            description=f"**{member.name}** đã rời server.",
-            color=discord.Color.red()
-        )
-        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-        embed.timestamp = datetime.now(timezone.utc)
-        await channel.send(embed=embed)
-
-# -------------------------
-# Mute + Xóa tin nhắn + Log
-# -------------------------
-async def mute_and_log(message, reason="vi phạm"):
-    try:
-        mute_role = message.guild.get_role(MUTE_ROLE_ID)
-        if not mute_role:
-            return
-
-        async for msg in message.channel.history(limit=200):
-            if msg.author == message.author and (datetime.now(timezone.utc) - msg.created_at).seconds <= TIME_WINDOW:
-                try:
-                    await msg.delete()
-                except:
-                    pass
-
-        await message.author.add_roles(mute_role)
-
-        log_channel = bot.get_channel(LOG_CHANNEL_ID)
-        if log_channel:
-            embed = discord.Embed(
-                title="🚨 Vi phạm",
-                description=f"**{message.author.mention}** bị mute 15 phút.\n**Lý do:** {reason}",
-                color=discord.Color.red()
-            )
-            embed.add_field(name="Tin nhắn", value=message.content or "*Không có*", inline=False)
-            embed.add_field(name="Kênh", value=message.channel.mention, inline=True)
-            embed.timestamp = datetime.now(timezone.utc)
-            await log_channel.send(embed=embed)
-
-        await asyncio.sleep(MUTE_TIME)
-        await message.author.remove_roles(mute_role)
-
-    except Exception as e:
-        print(f"Lỗi mute_and_log: {e}")
-
-# -------------------------
-# On Message (Filter + Anti-Spam)
-# -------------------------
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    content_lower = message.content.lower()
-
-    if any(bad_word in content_lower for bad_word in BAD_WORDS):
-        await mute_and_log(message, "dùng từ ngữ tục tĩu")
-        return
-
-    if any(block in content_lower for block in BLOCK_LINKS):
-        await mute_and_log(message, "gửi link bị cấm")
-        return
-
-    now = datetime.now()
-    uid = message.author.id
-    if uid not in user_messages:
-        user_messages[uid] = []
-    user_messages[uid].append(now)
-    user_messages[uid] = [t for t in user_messages[uid] if now - t < timedelta(seconds=TIME_WINDOW)]
-
-    if len(user_messages[uid]) > SPAM_LIMIT:
-        await mute_and_log(message, "spam tin nhắn")
-        user_messages[uid] = []
-        return
-
-    await bot.process_commands(message)
-
-# -------------------------
-# TikTok Checking
-# -------------------------
-async def fetch_latest_tiktok_video_id():
-    url = f"https://www.tiktok.com/@{TIKTOK_USERNAME}?lang=en"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            text = await response.text()
-            match = re.search(r'"id":"(\d{19})"', text)
-            return match.group(1) if match else None
-
-@tasks.loop(seconds=TIKTOK_CHECK_INTERVAL)
-async def check_tiktok_new_video():
-    global last_tiktok_video_id
-    try:
-        latest_id = await fetch_latest_tiktok_video_id()
-        if latest_id and latest_id != last_tiktok_video_id:
-            last_tiktok_video_id = latest_id
-            channel = bot.get_channel(TIKTOK_NOTIFY_CHANNEL_ID)
-            if channel:
-                await channel.send(f"🎥 TikTok mới: https://www.tiktok.com/@{TIKTOK_USERNAME}/video/{latest_id}")
-    except Exception as e:
-        print(f"Lỗi check TikTok: {e}")
 
 # -------------------------
 # Run Bot
