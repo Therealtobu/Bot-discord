@@ -74,8 +74,8 @@ class CaroGame:
             row = []
             for j in range(self.size):
                 label = "⬜" if self.board[i][j] == " " else ("❌" if self.board[i][j] == "X" else "⭕")
-                style = discord.ButtonStyle.gray if self.board[i][j] == " " else (
-                    discord.ButtonStyle.green if self.board[i][j] == "X" else discord.ButtonStyle.red
+                style = discord.ButtonStyle.secondary if self.board[i][j] == " " else (
+                    discord.ButtonStyle.success if self.board[i][j] == "X" else discord.ButtonStyle.danger
                 )
                 row.append(discord.ui.Button(label=label, style=style, custom_id=f"caro_{i}_{j}", disabled=self.board[i][j] != " "))
             self.buttons.append(row)
@@ -120,7 +120,7 @@ class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.success)
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(ROLE_ID)
         member = interaction.user
@@ -138,7 +138,7 @@ class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
         await interaction.channel.delete()
@@ -147,7 +147,7 @@ class CreateTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.success)
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = bot.get_guild(GUILD_ID)
         supporters_online = []
@@ -192,51 +192,82 @@ class CreateTicketView(discord.ui.View):
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    # Verify Embed
-    verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
-    if verify_channel:
-        embed = discord.Embed(
-            title="Xác Thực Thành Viên",
-            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
-            color=discord.Color.green()
-        )
-        await verify_channel.send(embed=embed, view=VerifyButton())
+    try:
+        # Verify Embed
+        verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
+        if verify_channel:
+            async for msg in verify_channel.history(limit=100):
+                if msg.author == bot.user:
+                    try:
+                        await msg.delete()
+                    except:
+                        pass
+            embed = discord.Embed(
+                title="Xác Thực Thành Viên",
+                description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+                color=discord.Color.green()
+            )
+            await verify_channel.send(embed=embed, view=VerifyButton())
+        else:
+            print(f"❌ Không tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
 
-    # Ticket Embed
-    ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
-    if ticket_channel:
-        embed = discord.Embed(
-            title="📢 Hỗ Trợ",
-            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
-                "---------------------\n"
-                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
-                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
-                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
-            color=discord.Color.orange()
-        )
-        await ticket_channel.send(embed=embed, view=CreateTicketView())
+        # Ticket Embed
+        ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
+        if ticket_channel:
+            async for msg in ticket_channel.history(limit=100):
+                if msg.author == bot.user:
+                    try:
+                        await msg.delete()
+                    except:
+                        pass
+            embed = discord.Embed(
+                title="📢 Hỗ Trợ",
+                description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
+                            "---------------------\n"
+                            "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                            "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                            "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
+                color=discord.Color.orange()
+            )
+            await ticket_channel.send(embed=embed, view=CreateTicketView())
+        else:
+            print(f"❌ Không tìm thấy kênh ticket: {TICKET_CHANNEL_ID}")
 
-    # Caro Embed
-    caro_channel = bot.get_channel(CARO_CHANNEL_ID)
-    if caro_channel:
-        embed = discord.Embed(
-            title="Cờ Caro",
-            description="Chọn chế độ chơi và kích thước bảng:",
-            color=discord.Color.blue()
-        )
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(label="Chơi với máy", style=discord.ButtonStyle.green, custom_id="play_bot"))
-        view.add_item(discord.ui.Button(label="Chơi với người", style=discord.ButtonStyle.blue, custom_id="play_human"))
-        select = discord.ui.Select(placeholder="Chọn kích thước bảng", options=[
-            discord.SelectOption(label="3x3", value="3x3"),
-            discord.SelectOption(label="5x5", value="5x5"),
-            discord.SelectOption(label="7x7", value="7x7")
-        ], custom_id="board_size")
-        view.add_item(select)
-        await caro_channel.send(embed=embed, view=view)
+        # Caro Embed
+        caro_channel = bot.get_channel(CARO_CHANNEL_ID)
+        if caro_channel:
+            async for msg in caro_channel.history(limit=100):
+                if msg.author == bot.user:
+                    try:
+                        await msg.delete()
+                    except:
+                        pass
+            embed = discord.Embed(
+                title="Cờ Caro",
+                description="Chọn chế độ chơi và kích thước bảng:",
+                color=discord.Color.blue()
+            )
+            view = discord.ui.View()
+            try:
+                view.add_item(discord.ui.Button(label="Chơi với máy", style=discord.ButtonStyle.success, custom_id="play_bot"))
+                view.add_item(discord.ui.Button(label="Chơi với người", style=discord.ButtonStyle.primary, custom_id="play_human"))
+                select = discord.ui.Select(placeholder="Chọn kích thước bảng", options=[
+                    discord.SelectOption(label="3x3", value="3x3"),
+                    discord.SelectOption(label="5x5", value="5x5"),
+                    discord.SelectOption(label="7x7", value="7x7")
+                ], custom_id="board_size")
+                view.add_item(select)
+                await caro_channel.send(embed=embed, view=view)
+            except Exception as e:
+                print(f"❌ Lỗi khi gửi embed caro: {e}")
+        else:
+            print(f"❌ Không tìm thấy kênh caro: {CARO_CHANNEL_ID}")
 
-    # Khởi động cập nhật số thành viên
-    update_member_count.start()
+        # Khởi động cập nhật số thành viên
+        update_member_count.start()
+
+    except Exception as e:
+        print(f"❌ Lỗi trong on_ready: {e}")
 
 # -------------------------
 # Cập nhật số thành viên & online
@@ -400,8 +431,8 @@ async def on_interaction(interaction: discord.Interaction):
         for row in game.buttons:
             for button in row:
                 view.add_item(button)
-        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.red, custom_id=f"close_caro_{channel.id}")
-        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.blurple, custom_id=f"replay_{channel.id}")
+        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}")
+        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}")
         view.add_item(close_button)
         view.add_item(replay_button)
         
@@ -454,8 +485,8 @@ async def on_interaction(interaction: discord.Interaction):
             for row in game.buttons:
                 for button in row:
                     view.add_item(button)
-            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.red, custom_id=f"close_caro_{channel.id}")
-            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.blurple, custom_id=f"replay_{channel.id}")
+            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}")
+            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}")
             view.add_item(close_button)
             view.add_item(replay_button)
             
@@ -497,8 +528,8 @@ async def on_interaction(interaction: discord.Interaction):
         for row in game.buttons:
             for button in row:
                 view.add_item(button)
-        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.red, custom_id=f"close_caro_{channel_id}")
-        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.blurple, custom_id=f"replay_{channel_id}")
+        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
+        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
         view.add_item(close_button)
         view.add_item(replay_button)
         
@@ -562,8 +593,8 @@ async def on_interaction(interaction: discord.Interaction):
         for row in game.buttons:
             for button in row:
                 view.add_item(button)
-        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.red, custom_id=f"close_caro_{channel_id}")
-        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.blurple, custom_id=f"replay_{channel_id}")
+        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
+        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
         view.add_item(close_button)
         view.add_item(replay_button)
         await interaction.response.edit_message(embed=embed, view=view)
