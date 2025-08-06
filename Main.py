@@ -2,6 +2,8 @@ import os
 import discord
 from discord.ext import commands, tasks
 import asyncio
+import aiohttp
+import re
 from datetime import datetime, timedelta, timezone
 from keep_alive import keep_alive
 import random
@@ -22,8 +24,8 @@ SUPPORTERS = ["__tobu", "caycotbietmua"]
 
 # Anti-Spam & Filter Config
 SPAM_LIMIT = 5
-TIME_WINDOW = 30  # giây
-MUTE_TIME = 900  # 15 phút
+TIME_WINDOW = 30
+MUTE_TIME = 900
 MUTE_ROLE_ID = 1402205863510282240
 LOG_CHANNEL_ID = 1402205862985994361
 
@@ -33,6 +35,12 @@ MEMBER_COUNT_CHANNEL_ID = 1402556153275093024
 # Log Join/Leave
 JOIN_CHANNEL_ID = 1402563416219975791
 LEAVE_CHANNEL_ID = 1402564378569736272
+
+# TikTok Notify
+TIKTOK_USERNAME = "caycotbietmua"
+TIKTOK_NOTIFY_CHANNEL_ID = 1402191653531549807
+TIKTOK_CHECK_INTERVAL = 300  # 5 phút
+last_tiktok_video_id = None
 
 user_messages = {}
 
@@ -77,7 +85,7 @@ class CloseTicketView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.red)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🔒 Ticket sẽ bị đóng trong 3 giây...", ephemeral=True)
+        await interaction.response.send_message("🔒 Ticket sẽ bị đóng...", ephemeral=True)
         await interaction.channel.delete()
 
 class CreateTicketView(discord.ui.View):
@@ -87,20 +95,16 @@ class CreateTicketView(discord.ui.View):
     @discord.ui.button(label="📩 Tạo Ticket", style=discord.ButtonStyle.green)
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = bot.get_guild(GUILD_ID)
-        supporters_online = []
-
-        for member in guild.members:
-            if member.name in SUPPORTERS and member.status != discord.Status.offline:
-                supporters_online.append(member)
+        supporters_online = [m for m in guild.members if m.name in SUPPORTERS and m.status != discord.Status.offline]
 
         if not supporters_online:
-            await interaction.response.send_message("❌ Hiện không có supporter nào online, vui lòng thử lại sau.", ephemeral=True)
+            await interaction.response.send_message("❌ Không có supporter nào online.", ephemeral=True)
             return
 
         supporter = random.choice(supporters_online)
 
         await interaction.response.send_message(
-            f"✅ **{supporter.display_name}** đã được đặt để hỗ trợ cho bạn, vui lòng kiểm tra ticket mới!",
+            f"✅ **{supporter.display_name}** sẽ hỗ trợ bạn.",
             ephemeral=True
         )
 
@@ -117,7 +121,7 @@ class CreateTicketView(discord.ui.View):
 
         embed = discord.Embed(
             title="🎫 Ticket Hỗ Trợ",
-            description=f"{supporter.mention} sẽ sớm hỗ trợ bạn.\nVui lòng nói vấn đề bạn cần hỗ trợ.",
+            description=f"{supporter.mention} sẽ hỗ trợ bạn.\nVui lòng mô tả vấn đề.",
             color=discord.Color.blue()
         )
         await ticket_channel.send(content=interaction.user.mention, embed=embed, view=CloseTicketView())
@@ -133,7 +137,7 @@ async def on_ready():
     if verify_channel:
         embed = discord.Embed(
             title="Xác Thực Thành Viên",
-            description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+            description="Bấm nút **Verify/Xác Thực** để tham gia.\n⬇️⬇️⬇️",
             color=discord.Color.green()
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
@@ -142,17 +146,13 @@ async def on_ready():
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
-            description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
-                "---------------------\n"
-                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
-                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
-                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
+            description="Bấm **Tạo Ticket** nếu cần hỗ trợ.\nKhông spam ticket!",
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
 
-    # Khởi động cập nhật số thành viên
     update_member_count.start()
+    check_tiktok_new_video.start()
 
 # -------------------------
 # Cập nhật số thành viên & online
@@ -182,8 +182,8 @@ async def on_member_join(member):
     channel = bot.get_channel(JOIN_CHANNEL_ID)
     if channel:
         embed = discord.Embed(
-            title="👋 Chào mừng thành viên mới!",
-            description=f"Xin chào {member.mention}, chúc bạn vui vẻ trong server!",
+            title="👋 Chào mừng!",
+            description=f"Xin chào {member.mention}!",
             color=discord.Color.green()
         )
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
@@ -198,7 +198,7 @@ async def on_member_remove(member):
     if channel:
         embed = discord.Embed(
             title="👋 Tạm biệt!",
-            description=f"Thành viên **{member.name}** đã rời khỏi server.",
+            description=f"**{member.name}** đã rời server.",
             color=discord.Color.red()
         )
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
@@ -212,10 +212,8 @@ async def mute_and_log(message, reason="vi phạm"):
     try:
         mute_role = message.guild.get_role(MUTE_ROLE_ID)
         if not mute_role:
-            print("❌ Không tìm thấy role mute!")
             return
 
-        # Xóa toàn bộ tin nhắn vi phạm trong TIME_WINDOW giây
         async for msg in message.channel.history(limit=200):
             if msg.author == message.author and (datetime.now(timezone.utc) - msg.created_at).seconds <= TIME_WINDOW:
                 try:
@@ -223,23 +221,20 @@ async def mute_and_log(message, reason="vi phạm"):
                 except:
                     pass
 
-        # Mute user
         await message.author.add_roles(mute_role)
 
-        # Gửi log
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             embed = discord.Embed(
-                title="🚨 Phát hiện vi phạm",
-                description=f"**Người vi phạm:** {message.author.mention}\n**Lý do:** {reason}\n**Thời gian mute:** 15 phút",
+                title="🚨 Vi phạm",
+                description=f"**{message.author.mention}** bị mute 15 phút.\n**Lý do:** {reason}",
                 color=discord.Color.red()
             )
-            embed.add_field(name="Nội dung", value=message.content or "*Không có nội dung*", inline=False)
+            embed.add_field(name="Tin nhắn", value=message.content or "*Không có*", inline=False)
             embed.add_field(name="Kênh", value=message.channel.mention, inline=True)
             embed.timestamp = datetime.now(timezone.utc)
             await log_channel.send(embed=embed)
 
-        # Gỡ mute sau MUTE_TIME
         await asyncio.sleep(MUTE_TIME)
         await message.author.remove_roles(mute_role)
 
@@ -256,17 +251,14 @@ async def on_message(message):
 
     content_lower = message.content.lower()
 
-    # 1. Từ cấm
     if any(bad_word in content_lower for bad_word in BAD_WORDS):
         await mute_and_log(message, "dùng từ ngữ tục tĩu")
         return
 
-    # 2. Link bị cấm
     if any(block in content_lower for block in BLOCK_LINKS):
         await mute_and_log(message, "gửi link bị cấm")
         return
 
-    # 3. Anti spam
     now = datetime.now()
     uid = message.author.id
     if uid not in user_messages:
@@ -280,6 +272,31 @@ async def on_message(message):
         return
 
     await bot.process_commands(message)
+
+# -------------------------
+# TikTok Checking
+# -------------------------
+async def fetch_latest_tiktok_video_id():
+    url = f"https://www.tiktok.com/@{TIKTOK_USERNAME}?lang=en"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            text = await response.text()
+            match = re.search(r'"id":"(\d{19})"', text)
+            return match.group(1) if match else None
+
+@tasks.loop(seconds=TIKTOK_CHECK_INTERVAL)
+async def check_tiktok_new_video():
+    global last_tiktok_video_id
+    try:
+        latest_id = await fetch_latest_tiktok_video_id()
+        if latest_id and latest_id != last_tiktok_video_id:
+            last_tiktok_video_id = latest_id
+            channel = bot.get_channel(TIKTOK_NOTIFY_CHANNEL_ID)
+            if channel:
+                await channel.send(f"🎥 TikTok mới: https://www.tiktok.com/@{TIKTOK_USERNAME}/video/{latest_id}")
+    except Exception as e:
+        print(f"Lỗi check TikTok: {e}")
 
 # -------------------------
 # Run Bot
