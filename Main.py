@@ -452,21 +452,27 @@ async def on_interaction(interaction: discord.Interaction):
         embed = discord.Embed(title=f"Cờ Caro {size}x{size}", description=f"Lượt của {interaction.user.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
         view = discord.ui.View()
         component_count = 0
+        # Thêm nút bảng caro theo hàng
         for row in game.buttons:
+            row_view = discord.ui.View()  # View riêng cho từng hàng
             for button in row:
                 if component_count < 23:  # Giới hạn 23 để chừa chỗ cho 2 nút
-                    view.add_item(button)
+                    row_view.add_item(button)
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
+            view.add_item(row_view)  # Thêm hàng vào view chính
+        # Thêm nút điều khiển vào hàng riêng
+        control_view = discord.ui.View()
         close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}")
         replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}")
-        view.add_item(close_button)
-        view.add_item(replay_button)
+        control_view.add_item(replay_button)
+        control_view.add_item(close_button)
         
         try:
             await channel.send(embed=embed, view=view)
-            print(f"✅ Sent caro board to channel: {channel.name}")
+            await channel.send(view=control_view)  # Gửi nút điều khiển riêng
+            print(f"✅ Sent caro board and controls to channel: {channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
             print(f"❌ Error sending caro board: {e}")
@@ -529,21 +535,27 @@ async def on_interaction(interaction: discord.Interaction):
             embed = discord.Embed(title=f"Cờ Caro {size}x{size}", description=f"Lượt của {interaction.user.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
             view = discord.ui.View()
             component_count = 0
+            # Thêm nút bảng caro theo hàng
             for row in game.buttons:
+                row_view = discord.ui.View()  # View riêng cho từng hàng
                 for button in row:
                     if component_count < 23:  # Giới hạn 23 để chừa chỗ cho 2 nút
-                        view.add_item(button)
+                        row_view.add_item(button)
                         component_count += 1
                     else:
                         print(f"❌ Skipped adding button: Maximum components reached")
+                view.add_item(row_view)  # Thêm hàng vào view chính
+            # Thêm nút điều khiển vào hàng riêng
+            control_view = discord.ui.View()
             close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}")
             replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}")
-            view.add_item(close_button)
-            view.add_item(replay_button)
+            control_view.add_item(replay_button)
+            control_view.add_item(close_button)
             
             try:
                 await channel.send(embed=embed, view=view)
-                print(f"✅ Sent caro board to channel: {channel.name}")
+                await channel.send(view=control_view)  # Gửi nút điều khiển riêng
+                print(f"✅ Sent caro board and controls to channel: {channel.name}")
             except Exception as e:
                 await interaction.followup.send(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
                 print(f"❌ Error sending caro board: {e}")
@@ -594,30 +606,38 @@ async def on_interaction(interaction: discord.Interaction):
         winner = game.check_winner(game.symbols[game.current_player])
         game.create_board()
         
+        embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.current_player.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
         view = discord.ui.View()
         component_count = 0
+        # Thêm nút bảng caro theo hàng
         for row in game.buttons:
+            row_view = discord.ui.View()  # View riêng cho từng hàng
             for button in row:
                 if component_count < 23:  # Giới hạn 23 để chừa chỗ cho 2 nút
-                    view.add_item(button)
+                    row_view.add_item(button)
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
-        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
-        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
-        view.add_item(close_button)
-        view.add_item(replay_button)
+            view.add_item(row_view)  # Thêm hàng vào view chính
+        # Thêm nút điều khiển vào hàng riêng
+        control_view = discord.ui.View()
+        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}")
+        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}")
+        control_view.add_item(replay_button)
+        control_view.add_item(close_button)
         
         try:
             if winner == True:
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"{interaction.user.mention} thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.green())
                 await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.channel.send(view=control_view)
                 del games[channel_id]
                 print(f"✅ Game ended: {interaction.user.name} wins")
                 return
             elif winner == "draw":
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
                 await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.channel.send(view=control_view)
                 del games[channel_id]
                 print("✅ Game ended: Draw")
                 return
@@ -635,24 +655,29 @@ async def on_interaction(interaction: discord.Interaction):
                     view = discord.ui.View()
                     component_count = 0
                     for row in game.buttons:
+                        row_view = discord.ui.View()
                         for button in row:
                             if component_count < 23:
-                                view.add_item(button)
+                                row_view.add_item(button)
                                 component_count += 1
                             else:
                                 print(f"❌ Skipped adding button: Maximum components reached")
-                    view.add_item(close_button)
-                    view.add_item(replay_button)
+                        view.add_item(row_view)
+                    control_view = discord.ui.View()
+                    control_view.add_item(replay_button)
+                    control_view.add_item(close_button)
                     
                     if winner == True:
                         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
                         await interaction.response.edit_message(embed=embed, view=view)
+                        await interaction.channel.send(view=control_view)
                         del games[channel_id]
                         print("✅ Game ended: Bot wins")
                         return
                     elif winner == "draw":
                         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
                         await interaction.response.edit_message(embed=embed, view=view)
+                        await interaction.channel.send(view=control_view)
                         del games[channel_id]
                         print("✅ Game ended: Draw")
                         return
@@ -660,11 +685,13 @@ async def on_interaction(interaction: discord.Interaction):
                     game.current_player = game.player1
                     embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.player1.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
                     await interaction.response.edit_message(embed=embed, view=view)
+                    await interaction.channel.send(view=control_view)
                     print(f"✅ Bot moved, now {game.player1.name}'s turn")
             else:
                 game.current_player = game.player2 if game.current_player == game.player1 else game.player1
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.current_player.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
                 await interaction.response.edit_message(embed=embed, view=view)
+                await interaction.channel.send(view=control_view)
                 print(f"✅ Now {game.current_player.name}'s turn")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi cập nhật bảng caro: {e}", ephemeral=True)
@@ -682,19 +709,25 @@ async def on_interaction(interaction: discord.Interaction):
         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.current_player.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
         view = discord.ui.View()
         component_count = 0
+        # Thêm nút bảng caro theo hàng
         for row in game.buttons:
+            row_view = discord.ui.View()
             for button in row:
                 if component_count < 23:
-                    view.add_item(button)
+                    row_view.add_item(button)
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
+            view.add_item(row_view)
+        # Thêm nút điều khiển vào hàng riêng
+        control_view = discord.ui.View()
         close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}")
         replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}")
-        view.add_item(close_button)
-        view.add_item(replay_button)
+        control_view.add_item(replay_button)
+        control_view.add_item(close_button)
         try:
             await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.channel.send(view=control_view)
             print(f"✅ Game replayed in channel: {interaction.channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi reset bảng caro: {e}", ephemeral=True)
