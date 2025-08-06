@@ -33,7 +33,7 @@ MEMBER_COUNT_CHANNEL_ID = 1402556153275093024
 user_messages = {}
 
 # Link bị cấm
-BLOCK_LINKS = ["youtube.com", "facebook.com", "discord.gg ]
+BLOCK_LINKS = ["youtube.com", "facebook.com"]
 
 # Từ cấm
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
