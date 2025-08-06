@@ -69,146 +69,6 @@ class VerifyButton(discord.ui.View):
             await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
 
 # -------------------------
-# Cấu hình Caro
-# -------------------------
-CARO_CHANNEL_ID = 1402622963823546369  # <-- Đặt ID channel muốn gửi menu Caro
-
-# -------------------------
-# Caro Game
-# -------------------------
-class CaroMenuView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🎮 Chơi với Bot", style=discord.ButtonStyle.green)
-    async def play_with_bot(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await start_caro_ticket(interaction, bot_mode=True)
-
-    @discord.ui.button(label="👥 Chơi với Người", style=discord.ButtonStyle.blurple)
-    async def play_with_player(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("📌 Vui lòng **tag người chơi** để bắt đầu.", ephemeral=True)
-
-        def check(m):
-            return m.author == interaction.user and m.mentions and m.channel == interaction.channel
-
-        try:
-            msg = await bot.wait_for("message", check=check, timeout=60)
-            opponent = msg.mentions[0]
-            await start_caro_ticket(interaction, bot_mode=False, opponent=opponent)
-        except asyncio.TimeoutError:
-            await interaction.followup.send("❌ Hết thời gian chọn người chơi.", ephemeral=True)
-
-
-class CaroButton(discord.ui.Button):
-    def __init__(self, x, y, label="⬜", disabled=False):
-        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=y, disabled=disabled)
-        self.x = x
-        self.y = y
-
-    async def callback(self, interaction: discord.Interaction):
-        view: CaroGameView = self.view
-        if view.game_over:
-            return await interaction.response.send_message("❌ Trò chơi đã kết thúc.", ephemeral=True)
-
-        if view.bot_mode:
-            if interaction.user != view.player1:
-                return await interaction.response.send_message("❌ Không phải lượt của bạn.", ephemeral=True)
-        else:
-            if interaction.user != view.current_turn:
-                return await interaction.response.send_message("❌ Không phải lượt của bạn.", ephemeral=True)
-
-        mark = "❌" if view.current_turn == view.player1 else "⭕"
-        self.label = mark
-        self.disabled = True
-        view.board[self.y][self.x] = mark
-
-        # Kiểm tra thắng
-        if check_win(view.board, mark):
-            view.game_over = True
-            await interaction.response.edit_message(content=f"🏆 **{interaction.user.display_name}** đã thắng!", view=view)
-            return
-
-        # Chuyển lượt
-        if view.bot_mode:
-            view.current_turn = None
-            await interaction.response.edit_message(view=view)
-            await asyncio.sleep(1)
-            await bot_move(view)
-        else:
-            view.current_turn = view.player2 if view.current_turn == view.player1 else view.player1
-            await interaction.response.edit_message(content=f"🎯 Lượt của **{view.current_turn.display_name}**", view=view)
-
-
-class CaroGameView(discord.ui.View):
-    def __init__(self, player1, player2=None, bot_mode=False):
-        super().__init__(timeout=None)
-        self.player1 = player1
-        self.player2 = player2
-        self.bot_mode = bot_mode
-        self.current_turn = player1
-        self.game_over = False
-        self.board = [["" for _ in range(5)] for _ in range(5)]
-
-        for y in range(5):
-            for x in range(5):
-                self.add_item(CaroButton(x, y))
-
-
-def check_win(board, mark):
-    for y in range(5):
-        for x in range(5):
-            if x <= 1 and all(board[y][x+i] == mark for i in range(4)): return True
-            if y <= 1 and all(board[y+i][x] == mark for i in range(4)): return True
-            if x <= 1 and y <= 1 and all(board[y+i][x+i] == mark for i in range(4)): return True
-            if x >= 3 and y <= 1 and all(board[y+i][x-i] == mark for i in range(4)): return True
-    return False
-
-
-async def bot_move(view: CaroGameView):
-    for y in range(5):
-        for x in range(5):
-            if view.board[y][x] == "":
-                view.board[y][x] = "⭕"
-                for item in view.children:
-                    if isinstance(item, CaroButton) and item.x == x and item.y == y:
-                        item.label = "⭕"
-                        item.disabled = True
-                break
-        else:
-            continue
-        break
-
-    if check_win(view.board, "⭕"):
-        view.game_over = True
-        await view.message.edit(content="💻 Bot đã thắng!", view=view)
-    else:
-        view.current_turn = view.player1
-        await view.message.edit(content=f"🎯 Lượt của **{view.player1.display_name}**", view=view)
-
-
-async def start_caro_ticket(interaction, bot_mode=False, opponent=None):
-    guild = interaction.guild
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
-    }
-    if bot_mode:
-        title = f"caro-bot-{interaction.user.name}"
-    else:
-        overwrites[opponent] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-        title = f"caro-vs-{interaction.user.name}-{opponent.name}"
-
-    ticket_channel = await guild.create_text_channel(title, overwrites=overwrites)
-
-    view = CaroGameView(player1=interaction.user, player2=opponent, bot_mode=bot_mode)
-    msg = await ticket_channel.send(
-        content=f"🎮 Bắt đầu Caro! {'(với Bot)' if bot_mode else f'({interaction.user.mention} vs {opponent.mention})'}\n🎯 Lượt của **{interaction.user.display_name}**",
-        view=view
-    )
-    view.message = msg
-
-# -------------------------
 # Ticket Buttons
 # -------------------------
 class CloseTicketView(discord.ui.View):
@@ -269,27 +129,6 @@ class CreateTicketView(discord.ui.View):
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
 
-    # Khởi tạo View giữ khi restart bot (persistent view)
-    bot.add_view(CaroMenuView())     # Đã fix thêm custom_id cho các nút bên trong
-    bot.add_view(VerifyButton())     # Đã fix custom_id
-    bot.add_view(CreateTicketView()) # Đã fix custom_id
-    bot.add_view(CloseTicketView())  # Đã fix custom_id
-
-    # Gửi menu Caro
-    caro_channel = bot.get_channel(CARO_CHANNEL_ID)
-    if caro_channel:
-        try:
-            await caro_channel.purge(limit=10)
-        except:
-            pass
-        embed = discord.Embed(
-            title="🎮 Chơi Caro",
-            description="Bấm nút để tạo phòng Caro chơi với người khác hoặc bot.",
-            color=discord.Color.blurple()
-        )
-        await caro_channel.send(embed=embed, view=CaroMenuView())
-
-    # Gửi Verify
     verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if verify_channel:
         embed = discord.Embed(
@@ -299,22 +138,22 @@ async def on_ready():
         )
         await verify_channel.send(embed=embed, view=VerifyButton())
 
-    # Gửi Ticket
     ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
     if ticket_channel:
         embed = discord.Embed(
             title="📢 Hỗ Trợ",
             description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
-                        "---------------------\n"
-                        "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
-                        "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
-                        "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
+                "---------------------\n"
+                "LƯU Ý: Vì các Mod khá bận nên việc Support vấn đề sẽ khá lâu và **Tuyệt đối không được spam nhiều ticket**.\n"
+                "Khi tạo ticket thì **nói thẳng vấn đề luôn**.\n"
+                "Nếu không tuân thủ các luật trên sẽ bị **mute 1 ngày**.",
             color=discord.Color.orange()
         )
         await ticket_channel.send(embed=embed, view=CreateTicketView())
 
     # Khởi động cập nhật số thành viên
     update_member_count.start()
+
 # -------------------------
 # Cập nhật số thành viên & online
 # -------------------------
