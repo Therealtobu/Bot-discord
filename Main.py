@@ -5,6 +5,8 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from keep_alive import keep_alive
 import random
+import json
+import re
 
 # -------------------------
 # Cấu hình bot
@@ -47,6 +49,55 @@ BLOCK_LINKS = ["youtube.com", "facebook.com"]
 
 # Từ cấm
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
+
+# Slot Config
+SLOT_CHANNEL_ID = 1405959238240702524  # Thay bằng ID kênh slot cố định
+ADMIN_ROLE_ID = 1404851048052559872
+symbols = ['🍒', '🍋', '🍉', '7', '⭐', '💎']
+multipliers = [2, 3, 4, 5, 10, 20]
+
+data = {}
+try:
+    with open('data.json', 'r') as f:
+        loaded = json.load(f)
+        data = {
+            k: {
+                'money': v['money'],
+                'last_daily': datetime.fromisoformat(v['last_daily']) if v['last_daily'] else None,
+                'spin_count': v.get('spin_count', 0),
+                'ban_until': datetime.fromisoformat(v['ban_until']) if v.get('ban_until') else None
+            } for k, v in loaded.items()
+        }
+except FileNotFoundError:
+    pass
+
+def save_data():
+    with open('data.json', 'w') as f:
+        json.dump({
+            k: {
+                'money': v['money'],
+                'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
+                'spin_count': v.get('spin_count', 0),
+                'ban_until': v['ban_until'].isoformat() if v.get('ban_until') else None
+            } for k, v in data.items()
+        }, f)
+
+def get_weights(tier):
+    w = [60 - 10 * tier, 50 - 8 * tier, 40 - 6 * tier, 30 - 4 * tier, 20 - 2 * tier, 10 + 30 * tier]
+    w = [max(1, x) for x in w]
+    return w
+
+def spin(tier):
+    weights = get_weights(tier)
+    reels = random.choices(symbols, weights=weights, k=3)
+    return reels
+
+def get_payout(reels, bet):
+    if reels[0] == reels[1] == reels[2]:
+        idx = symbols.index(reels[0])
+        return bet * multipliers[idx]
+    else:
+        return 0
 
 # Intents
 intents = discord.Intents.default()
@@ -371,7 +422,7 @@ async def mute_and_log(message, reason="vi phạm"):
         print(f"❌ Lỗi mute_and_log: {e}")
 
 # -------------------------
-# On Message (Filter + Anti-Spam)
+# On Message (Filter + Anti-Spam + Slot Commands)
 # -------------------------
 user_messages = {}
 
@@ -382,7 +433,12 @@ async def on_message(message):
 
     content_lower = message.content.lower()
 
-    if any(bad_word in content_lower for bad_word in BAD_WORDS):
+    # Extract URLs and check bad words only in non-URL parts
+    urls = re.findall(r'(https?://\S+)', message.content)
+    non_url_content = re.sub(r'https?://\S+', '', content_lower)
+    has_bad_word = any(bad_word in non_url_content for bad_word in BAD_WORDS)
+
+    if has_bad_word:
         await mute_and_log(message, "dùng từ ngữ tục tĩu")
         return
 
@@ -401,6 +457,165 @@ async def on_message(message):
         await mute_and_log(message, "spam tin nhắn")
         user_messages[uid] = []
         return
+
+    # Slot commands in specific channel without prefix
+    if message.channel.id == SLOT_CHANNEL_ID:
+        content = message.content.lower().strip().split()
+        if not content:
+            return
+
+        cmd = content[0]
+        user_id = str(message.author.id)
+
+        if cmd == 'help':
+            help_msg = "Hướng dẫn chơi:\n" \
+                       "- spin <số tiền>: Quay slot (cược >=100). Cược cao hơn tăng tier (bet//1000, max 5), tăng xác suất trúng item xịn.\n" \
+                       "- gift @user <số tiền>: Tặng tiền cho người khác.\n" \
+                       "- daily: Nhận 5k tiền hàng ngày.\n" \
+                       "- leaderboard: Xem bảng xếp hạng tiền.\n" \
+                       "- add @user <số tiền>: Admin thêm tiền (có thể âm).\n" \
+                       "- mod @user <số tiền>: Admin set tiền.\n" \
+                       "Lưu ý: Mỗi lần quay tăng khả năng bị 'cảnh sát bắt' (đùa thôi). Sau 10 lần quay, sẽ bị bắt, mất hết tiền và ban chơi 1 ngày."
+            await message.channel.send(help_msg)
+            return
+
+        if user_id not in data:
+            data[user_id] = {'money': 10000, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+            save_data()
+
+        if cmd == 'spin':
+            if len(content) < 2:
+                await message.channel.send("Sử dụng: spin <số tiền cược>")
+                return
+            try:
+                bet = int(content[1])
+                if bet < 100:
+                    await message.channel.send("Cược tối thiểu là 100")
+                    return
+            except ValueError:
+                await message.channel.send("Số tiền cược không hợp lệ")
+                return
+
+            user_data = data[user_id]
+            now = datetime.now(timezone.utc)
+            if user_data['ban_until'] and user_data['ban_until'] > now:
+                await message.channel.send("Bạn bị ban chơi trong 1 ngày do bị 'cảnh sát bắt' (đùa thôi)!")
+                return
+
+            money = user_data['money']
+            if money < bet:
+                await message.channel.send("Không đủ tiền")
+                return
+
+            user_data['money'] -= bet
+            user_data['spin_count'] += 1
+            save_data()
+
+            tier = min(bet // 1000, 5)
+            reels = spin(tier)
+
+            msg = await message.channel.send("Đang quay...")
+            for _ in range(5):
+                await asyncio.sleep(0.5)
+                rand_reels = ' '.join(random.choice(symbols) for _ in range(3))
+                await msg.edit(content=f"Đang quay... {rand_reels}")
+
+            final_reels = ' '.join(reels)
+            payout = get_payout(reels, bet)
+            net = payout - bet if payout > 0 else -bet
+
+            user_data['money'] += payout
+            save_data()
+
+            if payout > 0:
+                await msg.edit(content=f"{final_reels} Bạn thắng {net}! (Tổng {payout}) Tiền: {user_data['money']}")
+            else:
+                await msg.edit(content=f"{final_reels} Thua {bet}. Tiền: {user_data['money']}")
+
+            # Check for 'police catch' after spin
+            if user_data['spin_count'] >= 10:
+                await message.channel.send("🚔 Bạn bị 'cảnh sát bắt' (đùa thôi)! Mất hết tiền và không chơi được trong 1 ngày.")
+                user_data['money'] = 0
+                user_data['ban_until'] = now + timedelta(days=1)
+                user_data['spin_count'] = 0
+                save_data()
+
+        elif cmd == 'gift':
+            if len(content) < 3 or not message.mentions:
+                await message.channel.send("Sử dụng: gift @người_dùng <số_tiền>")
+                return
+            target = message.mentions[0]
+            if target.bot or target.id == message.author.id:
+                return
+            try:
+                amount = int(content[2])
+                if amount <= 0:
+                    return
+            except ValueError:
+                return
+
+            user_data = data[user_id]
+            if user_data['money'] < amount:
+                await message.channel.send("Không đủ tiền")
+                return
+
+            target_id = str(target.id)
+            if target_id not in data:
+                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+
+            user_data['money'] -= amount
+            data[target_id]['money'] += amount
+            save_data()
+
+            await message.channel.send(f"Tặng {amount} cho {target.mention}")
+
+        elif cmd == 'daily':
+            user_data = data[user_id]
+            last = user_data['last_daily']
+            today = datetime.now(timezone.utc).date()
+            if last is None or last < today:
+                user_data['money'] += 5000
+                user_data['last_daily'] = datetime.now(timezone.utc)
+                save_data()
+                await message.channel.send(f"Nhận 5k hàng ngày! Tiền: {user_data['money']}")
+            else:
+                await message.channel.send("Đã nhận hôm nay rồi.")
+
+        elif cmd == 'leaderboard':
+            sorted_users = sorted(data.items(), key=lambda x: x[1]['money'], reverse=True)[:10]
+            msg = "Bảng xếp hạng:\n"
+            for i, (uid, d) in enumerate(sorted_users, 1):
+                user = bot.get_user(int(uid))
+                name = user.name if user else uid
+                msg += f"{i}. {name}: {d['money']}\n"
+            await message.channel.send(msg)
+
+        elif cmd in ['add', 'mod']:
+            is_admin = any(role.id == ADMIN_ROLE_ID for role in message.author.roles)  # Assuming ADMIN_ROLE_ID defined, replace if needed
+            if not is_admin:
+                return
+            if len(content) < 3 or not message.mentions:
+                await message.channel.send(f"Sử dụng: {cmd} @người_dùng <số_tiền>")
+                return
+            target = message.mentions[0]
+            if target.bot:
+                return
+            try:
+                amount = int(content[2])
+            except ValueError:
+                return
+
+            target_id = str(target.id)
+            if target_id not in data:
+                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+
+            if cmd == 'add':
+                data[target_id]['money'] += amount
+            elif cmd == 'mod':
+                data[target_id]['money'] = amount
+            save_data()
+
+            await message.channel.send(f"Đã {cmd} tiền cho {target.mention} thành {data[target_id]['money']}")
 
     await bot.process_commands(message)
 
