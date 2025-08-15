@@ -38,11 +38,11 @@ LEAVE_CHANNEL_ID = 1402564378569736272
 
 # Caro Config
 CARO_CHANNEL_ID = 1402622963823546369
-BOARD_SIZES = {"3x3": 3, "5x5": 5}  # Loại bỏ 7x7 để tránh vượt giới hạn components
-games = {}  # Lưu trạng thái trò chơi caro
-board_messages = {}  # Lưu message_id của tin nhắn bảng caro
-control_messages = {}  # Lưu message_id của tin nhắn chứa nút điều khiển
-selected_board_size = {}  # Lưu kích thước bảng được chọn cho mỗi user
+BOARD_SIZES = {"3x3": 3, "5x5": 5}
+games = {}
+board_messages = {}
+control_messages = {}
+selected_board_size = {}
 
 # Link bị cấm
 BLOCK_LINKS = ["youtube.com", "facebook.com"]
@@ -51,40 +51,43 @@ BLOCK_LINKS = ["youtube.com", "facebook.com"]
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
 
 # Slot Config
-SLOT_CHANNEL_ID = 1405959238240702524  # Thay bằng ID kênh slot cố định
-ADMIN_ROLE_ID = 1404851048052559872
+SLOT_CHANNEL_ID = 1405959238240702524   # Thay bằng ID kênh slot cố định
+ADMIN_ROLE_ID = 1404851048052559872  # Thay bằng ID vai trò admin
 symbols = ['🍒', '🍋', '🍉', '7', '⭐', '💎']
 multipliers = [2, 3, 4, 5, 10, 20]
 
 data = {}
 try:
-    with open('data.json', 'r') as f:
+    with open('/data/data.json', 'r') as f:  # Dùng Render Disk
         loaded = json.load(f)
         data = {
             k: {
                 'money': v['money'],
                 'last_daily': datetime.fromisoformat(v['last_daily']) if v['last_daily'] else None,
                 'spin_count': v.get('spin_count', 0),
-                'ban_until': datetime.fromisoformat(v['ban_until']) if v.get('ban_until') else None
+                'ban_until': datetime.fromisoformat(v['ban_until']) if v['ban_until'] else None,
+                'spin_timestamps': [datetime.fromisoformat(t) for t in v.get('spin_timestamps', [])]
             } for k, v in loaded.items()
         }
 except FileNotFoundError:
     pass
 
 def save_data():
-    with open('data.json', 'w') as f:
+    with open('/data/data.json', 'w') as f:  # Dùng Render Disk
         json.dump({
             k: {
                 'money': v['money'],
                 'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
                 'spin_count': v.get('spin_count', 0),
-                'ban_until': v['ban_until'].isoformat() if v.get('ban_until') else None
+                'ban_until': v['ban_until'].isoformat() if v['ban_until'] else None,
+                'spin_timestamps': [t.isoformat() for t in v.get('spin_timestamps', [])]
             } for k, v in data.items()
         }, f)
 
 def get_weights(tier):
-    w = [60 - 10 * tier, 50 - 8 * tier, 40 - 6 * tier, 30 - 4 * tier, 20 - 2 * tier, 10 + 30 * tier]
-    w = [max(1, x) for x in w]
+    # Tăng mạnh xác suất trúng khi tier cao
+    w = [100 - 5 * tier, 90 - 4 * tier, 80 - 3 * tier, 70 - 2 * tier, 50 + 5 * tier, 30 + 15 * tier]
+    w = [max(10, x) for x in w]
     return w
 
 def spin(tier):
@@ -94,10 +97,15 @@ def spin(tier):
 
 def get_payout(reels, bet):
     if reels[0] == reels[1] == reels[2]:
+        # Trùng 3 biểu tượng: Nhân theo hệ số
         idx = symbols.index(reels[0])
         return bet * multipliers[idx]
+    elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+        # Trùng 2 biểu tượng: Nhận 1.5x tiền cược
+        return int(bet * 1.5)
     else:
-        return 0
+        # Không trùng: Nhận lại 50% tiền cược
+        return int(bet * 0.5)
 
 # Intents
 intents = discord.Intents.default()
@@ -246,6 +254,8 @@ class CreateTicketView(discord.ui.View):
 @bot.event
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
+    print(f"Current directory: {os.getcwd()}")
+    print(f"Can write to directory: {os.access('/data', os.W_OK)}")
 
     try:
         # Verify Embed
@@ -469,18 +479,21 @@ async def on_message(message):
 
         if cmd == 'help':
             help_msg = "Hướng dẫn chơi:\n" \
-                       "- spin <số tiền>: Quay slot (cược >=100). Cược cao hơn tăng tier (bet//1000, max 5), tăng xác suất trúng item xịn.\n" \
+                       "- spin <số tiền>: Quay slot (cược >=100). Cược cao hơn tăng tier (bet//1000, max 5), tăng mạnh xác suất trúng item xịn.\n" \
+                       "- Không trùng: Nhận lại 50% tiền cược.\n" \
+                       "- Trùng 2 biểu tượng: Nhận 1.5x tiền cược.\n" \
+                       "- Trùng 3 biểu tượng: Nhận 2x-20x tiền cược tùy biểu tượng.\n" \
                        "- gift @user <số tiền>: Tặng tiền cho người khác.\n" \
                        "- daily: Nhận 5k tiền hàng ngày.\n" \
                        "- leaderboard: Xem bảng xếp hạng tiền.\n" \
                        "- add @user <số tiền>: Admin thêm tiền (có thể âm).\n" \
                        "- mod @user <số tiền>: Admin set tiền.\n" \
-                       "Lưu ý: Mỗi lần quay tăng khả năng bị 'cảnh sát bắt' (đùa thôi). Sau 10 lần quay, sẽ bị bắt, mất hết tiền và ban chơi 1 ngày."
+                       "Lưu ý: Quay 10 lần trong 1 phút sẽ bị 'cảnh sát bắt' (đùa thôi), mất hết tiền và ban chơi 1 ngày."
             await message.channel.send(help_msg)
             return
 
         if user_id not in data:
-            data[user_id] = {'money': 10000, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+            data[user_id] = {'money': 10000, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
             save_data()
 
         if cmd == 'spin':
@@ -507,6 +520,9 @@ async def on_message(message):
                 await message.channel.send("Không đủ tiền")
                 return
 
+            # Cập nhật danh sách thời gian quay
+            user_data['spin_timestamps'] = [t for t in user_data.get('spin_timestamps', []) if (now - t).total_seconds() <= 60]
+            user_data['spin_timestamps'].append(now)
             user_data['money'] -= bet
             user_data['spin_count'] += 1
             save_data()
@@ -514,29 +530,39 @@ async def on_message(message):
             tier = min(bet // 1000, 5)
             reels = spin(tier)
 
-            msg = await message.channel.send("Đang quay...")
-            for _ in range(5):
-                await asyncio.sleep(0.5)
-                rand_reels = ' '.join(random.choice(symbols) for _ in range(3))
-                await msg.edit(content=f"Đang quay... {rand_reels}")
+            # Hiệu ứng quay giống máy slot
+            msg = await message.channel.send("🎰 Đang quay... |")
+            spin_anim = ['|', '/', '-', '\\']
+            for i in range(6):  # 6 frame để mượt hơn
+                await asyncio.sleep(0.3)  # Thời gian mỗi frame
+                temp_reels = [
+                    reels[0] if i >= 2 else random.choice(symbols),
+                    reels[1] if i >= 4 else random.choice(symbols),
+                    reels[2] if i >= 6 else random.choice(symbols)
+                ]
+                anim_char = spin_anim[i % len(spin_anim)]
+                await msg.edit(content=f"🎰 Đang quay... {anim_char} {' '.join(temp_reels)}")
 
             final_reels = ' '.join(reels)
             payout = get_payout(reels, bet)
-            net = payout - bet if payout > 0 else -bet
+            net = payout - bet
 
             user_data['money'] += payout
             save_data()
 
-            if payout > 0:
-                await msg.edit(content=f"{final_reels} Bạn thắng {net}! (Tổng {payout}) Tiền: {user_data['money']}")
+            if reels[0] == reels[1] == reels[2]:
+                await msg.edit(content=f"🎰 {final_reels} Bạn thắng lớn {net}! (Tổng {payout}) Tiền: {user_data['money']}")
+            elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+                await msg.edit(content=f"🎰 {final_reels} Trùng 2! Thắng {net}! (Tổng {payout}) Tiền: {user_data['money']}")
             else:
-                await msg.edit(content=f"{final_reels} Thua {bet}. Tiền: {user_data['money']}")
+                await msg.edit(content=f"🎰 {final_reels} Không trùng! Nhận lại {payout}. Tiền: {user_data['money']}")
 
             # Check for 'police catch' after spin
-            if user_data['spin_count'] >= 10:
+            if len(user_data['spin_timestamps']) >= 10:
                 await message.channel.send("🚔 Bạn bị 'cảnh sát bắt' (đùa thôi)! Mất hết tiền và không chơi được trong 1 ngày.")
                 user_data['money'] = 0
                 user_data['ban_until'] = now + timedelta(days=1)
+                user_data['spin_timestamps'] = []
                 user_data['spin_count'] = 0
                 save_data()
 
@@ -561,7 +587,7 @@ async def on_message(message):
 
             target_id = str(target.id)
             if target_id not in data:
-                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
 
             user_data['money'] -= amount
             data[target_id]['money'] += amount
@@ -573,7 +599,7 @@ async def on_message(message):
             user_data = data[user_id]
             last = user_data['last_daily']
             today = datetime.now(timezone.utc).date()
-            if last is None or last < today:
+            if last is None or last.date() < today:
                 user_data['money'] += 5000
                 user_data['last_daily'] = datetime.now(timezone.utc)
                 save_data()
@@ -591,7 +617,7 @@ async def on_message(message):
             await message.channel.send(msg)
 
         elif cmd in ['add', 'mod']:
-            is_admin = any(role.id == ADMIN_ROLE_ID for role in message.author.roles)  # Assuming ADMIN_ROLE_ID defined, replace if needed
+            is_admin = any(role.id == ADMIN_ROLE_ID for role in message.author.roles)
             if not is_admin:
                 return
             if len(content) < 3 or not message.mentions:
@@ -607,7 +633,7 @@ async def on_message(message):
 
             target_id = str(target.id)
             if target_id not in data:
-                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None}
+                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
 
             if cmd == 'add':
                 data[target_id]['money'] += amount
@@ -632,7 +658,7 @@ async def on_interaction(interaction: discord.Interaction):
         size = BOARD_SIZES.get(interaction.data.get("values")[0], 5)
         selected_board_size[interaction.user.id] = size
         print(f"🔍 User {interaction.user.name} selected board size: {size}x{size}")
-        await interaction.response.defer(ephemeral=True)  # Phản hồi tạm thời để tránh timeout
+        await interaction.response.defer(ephemeral=True)
         return
 
     # Xử lý Verify và Ticket
@@ -645,9 +671,9 @@ async def on_interaction(interaction: discord.Interaction):
 
     # Xử lý Caro: Chơi với máy
     elif custom_id == "play_bot":
-        size = selected_board_size.get(interaction.user.id, 5)  # Lấy kích thước đã chọn, mặc định 5x5
+        size = selected_board_size.get(interaction.user.id, 5)
         print(f"🔍 Board size for play_bot: {size}x{size}")
-        
+
         guild = interaction.guild
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -661,11 +687,11 @@ async def on_interaction(interaction: discord.Interaction):
             await interaction.response.send_message(f"❌ Lỗi khi tạo kênh caro: {e}", ephemeral=True)
             print(f"❌ Error creating channel for play_bot: {e}")
             return
-        
+
         game = CaroGame(interaction.user, is_bot=True, size=size)
         games[channel.id] = game
         game.create_board()
-        
+
         embed = discord.Embed(title=f"Cờ Caro {size}x{size}", description=f"Lượt của {interaction.user.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
         view = discord.ui.View()
         component_count = 0
@@ -676,26 +702,26 @@ async def on_interaction(interaction: discord.Interaction):
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
-        
+
         control_view = discord.ui.View()
         close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}", disabled=True)
         replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}", disabled=True)
         control_view.add_item(replay_button)
         control_view.add_item(close_button)
-        
+
         try:
             board_message = await channel.send(embed=embed, view=view)
-            board_messages[channel.id] = board_message.id  # Lưu message_id của bảng
+            board_messages[channel.id] = board_message.id
             control_message = await channel.send(view=control_view)
-            control_messages[channel.id] = control_message.id  # Lưu message_id của control_view
+            control_messages[channel.id] = control_message.id
             print(f"✅ Sent caro board (message_id: {board_message.id}) and controls (message_id: {control_message.id}) to channel: {channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
             print(f"❌ Error sending caro board: {e}")
             return
-        
+
         await interaction.response.send_message(f"Ticket đã được tạo tại {channel.mention}", ephemeral=True)
-        
+
         while channel.id in games:
             if asyncio.get_event_loop().time() - games[channel.id].last_move_time > 30:
                 try:
@@ -741,10 +767,10 @@ async def on_interaction(interaction: discord.Interaction):
                 await interaction.followup.send("Không thể chơi với chính mình! Vui lòng tag người khác.", ephemeral=True)
                 print("❌ Tagged self")
                 return
-            
-            size = selected_board_size.get(interaction.user.id, 5)  # Lấy kích thước đã chọn, mặc định 5x5
+
+            size = selected_board_size.get(interaction.user.id, 5)
             print(f"🔍 Board size for play_human: {size}x{size}")
-            
+
             guild = interaction.guild
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -759,11 +785,11 @@ async def on_interaction(interaction: discord.Interaction):
                 await interaction.followup.send(f"❌ Lỗi khi tạo kênh caro: {e}", ephemeral=True)
                 print(f"❌ Error creating channel for play_human: {e}")
                 return
-            
+
             game = CaroGame(interaction.user, opponent, size=size)
             games[channel.id] = game
             game.create_board()
-            
+
             embed = discord.Embed(title=f"Cờ Caro {size}x{size}", description=f"Lượt của {interaction.user.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
             view = discord.ui.View()
             component_count = 0
@@ -774,26 +800,26 @@ async def on_interaction(interaction: discord.Interaction):
                         component_count += 1
                     else:
                         print(f"❌ Skipped adding button: Maximum components reached")
-            
+
             control_view = discord.ui.View()
             close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel.id}", disabled=True)
             replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel.id}", disabled=True)
             control_view.add_item(replay_button)
             control_view.add_item(close_button)
-            
+
             try:
                 board_message = await channel.send(embed=embed, view=view)
-                board_messages[channel.id] = board_message.id  # Lưu message_id của bảng
+                board_messages[channel.id] = board_message.id
                 control_message = await channel.send(view=control_view)
-                control_messages[channel.id] = control_message.id  # Lưu message_id của control_view
+                control_messages[channel.id] = control_message.id
                 print(f"✅ Sent caro board (message_id: {board_message.id}) and controls (message_id: {control_message.id}) to channel: {channel.name}")
             except Exception as e:
                 await interaction.followup.send(f"❌ Lỗi khi gửi bảng caro: {e}", ephemeral=True)
                 print(f"❌ Error sending caro board: {e}")
                 return
-            
+
             await interaction.followup.send(f"Ticket đã được tạo tại {channel.mention}", ephemeral=True)
-            
+
             while channel.id in games:
                 if asyncio.get_event_loop().time() - games[channel.id].last_move_time > 30:
                     try:
@@ -821,7 +847,7 @@ async def on_interaction(interaction: discord.Interaction):
                         pass
                     break
                 await asyncio.sleep(5)
-                
+
         except asyncio.TimeoutError:
             await interaction.followup.send("Hết thời gian chờ! Vui lòng thử lại.", ephemeral=True)
             print("❌ Timeout waiting for opponent tag")
@@ -833,15 +859,15 @@ async def on_interaction(interaction: discord.Interaction):
             await interaction.response.send_message("Trò chơi không tồn tại!", ephemeral=True)
             print("❌ Game not found")
             return
-        
+
         game = games[channel_id]
         if interaction.user != game.current_player and not (game.is_bot and interaction.user == game.player1):
             await interaction.response.send_message("Không phải lượt của bạn!", ephemeral=True)
             print(f"❌ Not your turn: {interaction.user.name}")
             return
-        
+
         game.last_move_time = asyncio.get_event_loop().time()
-        
+
         try:
             _, row, col = custom_id.split("_")
             row, col = int(row), int(col)
@@ -849,12 +875,12 @@ async def on_interaction(interaction: discord.Interaction):
             await interaction.response.send_message("❌ Lỗi khi xử lý nước đi!", ephemeral=True)
             print("❌ Error parsing caro move")
             return
-        
+
         game.board[row][col] = game.symbols[game.current_player]
-        
+
         winner = game.check_winner(game.symbols[game.current_player])
         game.create_board()
-        
+
         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.current_player.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
         view = discord.ui.View()
         component_count = 0
@@ -865,7 +891,7 @@ async def on_interaction(interaction: discord.Interaction):
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
-        
+
         try:
             if winner == True:
                 embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"{interaction.user.mention} thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.green())
@@ -901,7 +927,7 @@ async def on_interaction(interaction: discord.Interaction):
                         print(f"❌ Error enabling control buttons")
                 print("✅ Game ended: Draw")
                 return
-            
+
             if game.is_bot:
                 game.current_player = game.player2
                 bot_move = game.bot_move()
@@ -911,7 +937,7 @@ async def on_interaction(interaction: discord.Interaction):
                     game.last_move_time = asyncio.get_event_loop().time()
                     winner = game.check_winner(game.symbols[game.player2])
                     game.create_board()
-                    
+
                     view = discord.ui.View()
                     component_count = 0
                     for row in game.buttons:
@@ -921,7 +947,7 @@ async def on_interaction(interaction: discord.Interaction):
                                 component_count += 1
                             else:
                                 print(f"❌ Skipped adding button: Maximum components reached")
-                    
+
                     if winner == True:
                         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
                         await interaction.response.edit_message(embed=embed, view=view)
@@ -956,7 +982,7 @@ async def on_interaction(interaction: discord.Interaction):
                                 print(f"❌ Error enabling control buttons")
                         print("✅ Game ended: Draw")
                         return
-                    
+
                     game.current_player = game.player1
                     embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.player1.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
                     await interaction.response.edit_message(embed=embed, view=view)
@@ -977,7 +1003,7 @@ async def on_interaction(interaction: discord.Interaction):
             await interaction.response.send_message("Trò chơi không tồn tại!", ephemeral=True)
             print("❌ Replay: Game not found")
             return
-        
+
         game = games[channel_id]
         game.reset_board()
         embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description=f"Lượt của {game.current_player.mention}\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.blue())
@@ -990,7 +1016,7 @@ async def on_interaction(interaction: discord.Interaction):
                     component_count += 1
                 else:
                     print(f"❌ Skipped adding button: Maximum components reached")
-        
+
         try:
             if channel_id in board_messages:
                 board_message = await interaction.channel.fetch_message(board_messages[channel_id])
@@ -1000,7 +1026,7 @@ async def on_interaction(interaction: discord.Interaction):
                 board_message = await interaction.channel.send(embed=embed, view=view)
                 board_messages[channel_id] = board_message.id
                 print(f"✅ Sent new board message (message_id: {board_message.id}) in channel: {interaction.channel.name}")
-            
+
             if channel_id in control_messages:
                 try:
                     control_message = await interaction.channel.fetch_message(control_messages[channel_id])
@@ -1015,7 +1041,7 @@ async def on_interaction(interaction: discord.Interaction):
                     control_message = await interaction.channel.send(view=control_view)
                     control_messages[channel_id] = control_message.id
                     print(f"✅ Sent new control message (message_id: {control_message.id}) in channel: {interaction.channel.name}")
-            await interaction.response.defer()  # Phản hồi tạm thời để tránh timeout
+            await interaction.response.defer()
             print(f"✅ Game replayed in channel: {interaction.channel.name}")
         except Exception as e:
             await interaction.response.send_message(f"❌ Lỗi khi reset bảng caro: {e}", ephemeral=True)
