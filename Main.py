@@ -15,7 +15,7 @@ import base64
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = "username/your-repo"  # Thay bằng tên repository (ví dụ: "username/discord-bot")
+REPO_NAME = "Therealtobu/Bot-discord"  # Thay bằng tên repository (ví dụ: "username/discord-bot")
 FILE_PATH = "data.json"
 
 # Verify Config
