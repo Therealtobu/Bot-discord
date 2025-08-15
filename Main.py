@@ -7,11 +7,16 @@ from keep_alive import keep_alive
 import random
 import json
 import re
+from github import Github
+import base64
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO_NAME = "username/your-repo"  # Thay bằng tên repository (ví dụ: "username/discord-bot")
+FILE_PATH = "data.json"
 
 # Verify Config
 ROLE_ID = 1400724722714542111
@@ -51,15 +56,19 @@ BLOCK_LINKS = ["youtube.com", "facebook.com"]
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
 
 # Slot Config
-SLOT_CHANNEL_ID = 1405959238240702524   # Thay bằng ID kênh slot cố định
+SLOT_CHANNEL_ID = 1405959238240702524  # Thay bằng ID kênh slot cố định
 ADMIN_ROLE_ID = 1404851048052559872  # Thay bằng ID vai trò admin
 symbols = ['🍒', '🍋', '🍉', '7', '⭐', '💎']
 multipliers = [2, 3, 4, 5, 10, 20]
 
+# Khởi tạo dữ liệu từ GitHub
 data = {}
-try:
-    with open('/data/data.json', 'r') as f:  # Dùng Render Disk
-        loaded = json.load(f)
+g = Github(GITHUB_TOKEN) if GITHUB_TOKEN else None
+if g:
+    try:
+        repo = g.get_repo(REPO_NAME)
+        file = repo.get_contents(FILE_PATH)
+        loaded = json.loads(base64.b64decode(file.content).decode('utf-8'))
         data = {
             k: {
                 'money': v['money'],
@@ -69,20 +78,35 @@ try:
                 'spin_timestamps': [datetime.fromisoformat(t) for t in v.get('spin_timestamps', [])]
             } for k, v in loaded.items()
         }
-except FileNotFoundError:
-    pass
+    except:
+        data = {}
+        repo.create_file(FILE_PATH, "Create data.json", json.dumps(data, indent=2))
 
 def save_data():
-    with open('/data/data.json', 'w') as f:  # Dùng Render Disk
-        json.dump({
-            k: {
-                'money': v['money'],
-                'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
-                'spin_count': v.get('spin_count', 0),
-                'ban_until': v['ban_until'].isoformat() if v['ban_until'] else None,
-                'spin_timestamps': [t.isoformat() for t in v.get('spin_timestamps', [])]
-            } for k, v in data.items()
-        }, f)
+    if g:
+        try:
+            repo = g.get_repo(REPO_NAME)
+            content = {
+                k: {
+                    'money': v['money'],
+                    'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
+                    'spin_count': v.get('spin_count', 0),
+                    'ban_until': v['ban_until'].isoformat() if v['ban_until'] else None,
+                    'spin_timestamps': [t.isoformat() for t in v.get('spin_timestamps', [])]
+                } for k, v in data.items()
+            }
+            try:
+                file = repo.get_contents(FILE_PATH)
+                repo.update_file(
+                    FILE_PATH,
+                    f"Update data.json {datetime.now(timezone.utc).isoformat()}",
+                    json.dumps(content, indent=2),
+                    file.sha
+                )
+            except:
+                repo.create_file(FILE_PATH, "Create data.json", json.dumps(content, indent=2))
+        except Exception as e:
+            print(f"❌ Lỗi khi đẩy data.json lên GitHub: {e}")
 
 def get_weights(tier):
     # Tăng mạnh xác suất trúng khi tier cao
@@ -255,7 +279,6 @@ class CreateTicketView(discord.ui.View):
 async def on_ready():
     print(f"✅ Bot đã đăng nhập: {bot.user}")
     print(f"Current directory: {os.getcwd()}")
-    print(f"Can write to directory: {os.access('/data', os.W_OK)}")
 
     try:
         # Verify Embed
@@ -272,7 +295,7 @@ async def on_ready():
                 description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
                 color=discord.Color.green()
             )
-            await verify_channel.send(embed=embed, view=VerifyButton())
+            await verify_channel.send(embed=embed, view VerifyButton())
         else:
             print(f"❌ Không tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
 
@@ -1070,5 +1093,7 @@ keep_alive()
 
 if not DISCORD_TOKEN:
     print("❌ Chưa đặt DISCORD_TOKEN")
+elif not GITHUB_TOKEN:
+    print("❌ Chưa đặt GITHUB_TOKEN")
 else:
     bot.run(DISCORD_TOKEN)
