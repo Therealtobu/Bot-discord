@@ -15,7 +15,7 @@ import base64
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = "Therealtobu/Bot-discord"  # Thay bằng tên repository (ví dụ: "username/discord-bot")
+REPO_NAME = "TobuTheXd/Bot-discord"  # Thay bằng tên repository (ví dụ: "yourusername/discord-bot")
 FILE_PATH = "data.json"
 
 # Verify Config
@@ -56,8 +56,8 @@ BLOCK_LINKS = ["youtube.com", "facebook.com"]
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
 
 # Slot Config
-SLOT_CHANNEL_ID = 1405959238240702524  # Thay bằng ID kênh slot cố định
-ADMIN_ROLE_ID = 1404851048052559872  # Thay bằng ID vai trò admin
+SLOT_CHANNEL_ID = 1234567890  # Thay bằng ID kênh slot cố định
+ADMIN_ROLE_ID = 9876543210  # Thay bằng ID vai trò admin
 symbols = ['🍒', '🍋', '🍉', '7', '⭐', '💎']
 multipliers = [2, 3, 4, 5, 10, 20]
 
@@ -78,7 +78,8 @@ if g:
                 'spin_timestamps': [datetime.fromisoformat(t) for t in v.get('spin_timestamps', [])]
             } for k, v in loaded.items()
         }
-    except:
+    except Exception as e:
+        print(f"❌ Lỗi khi đọc data.json từ GitHub: {e}")
         data = {}
         repo.create_file(FILE_PATH, "Create data.json", json.dumps(data, indent=2))
 
@@ -109,7 +110,6 @@ def save_data():
             print(f"❌ Lỗi khi đẩy data.json lên GitHub: {e}")
 
 def get_weights(tier):
-    # Tăng mạnh xác suất trúng khi tier cao
     w = [100 - 5 * tier, 90 - 4 * tier, 80 - 3 * tier, 70 - 2 * tier, 50 + 5 * tier, 30 + 15 * tier]
     w = [max(10, x) for x in w]
     return w
@@ -121,14 +121,11 @@ def spin(tier):
 
 def get_payout(reels, bet):
     if reels[0] == reels[1] == reels[2]:
-        # Trùng 3 biểu tượng: Nhân theo hệ số
         idx = symbols.index(reels[0])
         return bet * multipliers[idx]
     elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-        # Trùng 2 biểu tượng: Nhận 1.5x tiền cược
         return int(bet * 1.5)
     else:
-        # Không trùng: Nhận lại 50% tiền cược
         return int(bet * 0.5)
 
 # Intents
@@ -284,30 +281,35 @@ async def on_ready():
         # Verify Embed
         verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
         if verify_channel:
+            print(f"✅ Tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
             async for msg in verify_channel.history(limit=50):
                 if msg.author == bot.user:
                     try:
                         await msg.delete()
-                    except:
-                        pass
+                        print(f"✅ Đã xóa tin nhắn cũ trong kênh verify")
+                    except Exception as e:
+                        print(f"❌ Lỗi khi xóa tin nhắn cũ trong verify: {e}")
             embed = discord.Embed(
                 title="Xác Thực Thành Viên",
                 description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
                 color=discord.Color.green()
             )
-            await verify_channel.send(embed=embed, view VerifyButton())
+            await verify_channel.send(embed=embed, view=VerifyButton())
+            print(f"✅ Đã gửi embed verify đến kênh {verify_channel.name}")
         else:
             print(f"❌ Không tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
 
         # Ticket Embed
         ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
         if ticket_channel:
+            print(f"✅ Tìm thấy kênh ticket: {TICKET_CHANNEL_ID}")
             async for msg in ticket_channel.history(limit=50):
                 if msg.author == bot.user:
                     try:
                         await msg.delete()
-                    except:
-                        pass
+                        print(f"✅ Đã xóa tin nhắn cũ trong kênh ticket")
+                    except Exception as e:
+                        print(f"❌ Lỗi khi xóa tin nhắn cũ trong ticket: {e}")
             embed = discord.Embed(
                 title="📢 Hỗ Trợ",
                 description="Nếu bạn cần **Hỗ Trợ** hãy bấm nút **Tạo Ticket** ở dưới\n"
@@ -318,18 +320,21 @@ async def on_ready():
                 color=discord.Color.orange()
             )
             await ticket_channel.send(embed=embed, view=CreateTicketView())
+            print(f"✅ Đã gửi embed ticket đến kênh {ticket_channel.name}")
         else:
             print(f"❌ Không tìm thấy kênh ticket: {TICKET_CHANNEL_ID}")
 
         # Caro Embed
         caro_channel = bot.get_channel(CARO_CHANNEL_ID)
         if caro_channel:
+            print(f"✅ Tìm thấy kênh caro: {CARO_CHANNEL_ID}")
             async for msg in caro_channel.history(limit=50):
                 if msg.author == bot.user:
                     try:
                         await msg.delete()
-                    except:
-                        pass
+                        print(f"✅ Đã xóa tin nhắn cũ trong kênh caro")
+                    except Exception as e:
+                        print(f"❌ Lỗi khi xóa tin nhắn cũ trong caro: {e}")
             embed = discord.Embed(
                 title="Cờ Caro",
                 description="Chọn chế độ chơi và kích thước bảng:",
@@ -345,7 +350,7 @@ async def on_ready():
                 ], custom_id="board_size")
                 view.add_item(select)
                 await caro_channel.send(embed=embed, view=view)
-                print(f"✅ Sent caro embed to channel: {caro_channel.name}")
+                print(f"✅ Đã gửi embed caro đến kênh: {caro_channel.name}")
             except Exception as e:
                 print(f"❌ Lỗi khi gửi embed caro: {e}")
         else:
@@ -353,6 +358,7 @@ async def on_ready():
 
         # Khởi động cập nhật số thành viên
         update_member_count.start()
+        print("✅ Đã khởi động task update_member_count")
 
     except Exception as e:
         print(f"❌ Lỗi trong on_ready: {e}")
@@ -364,6 +370,7 @@ async def on_ready():
 async def update_member_count():
     guild = bot.get_guild(GUILD_ID)
     if not guild:
+        print(f"❌ Không tìm thấy guild: {GUILD_ID}")
         return
 
     total_members = len([m for m in guild.members if not m.bot and not m.system])
@@ -375,6 +382,7 @@ async def update_member_count():
             await channel.edit(name=f"📊 {total_members} thành viên | 🟢 {online_members} online")
             overwrite = discord.PermissionOverwrite(connect=False, view_channel=True, send_messages=False)
             await channel.set_permissions(guild.default_role, overwrite=overwrite)
+            print(f"✅ Đã cập nhật kênh thành viên: {total_members} thành viên, {online_members} online")
         except Exception as e:
             print(f"❌ Lỗi khi cập nhật số thành viên: {e}")
 
@@ -396,6 +404,7 @@ async def on_member_join(member):
             embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
             embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=embed)
+            print(f"✅ Đã gửi thông báo member join: {member.name}")
         except Exception as e:
             print(f"❌ Lỗi khi gửi thông báo member join: {e}")
 
@@ -414,6 +423,7 @@ async def on_member_remove(member):
             embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
             embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=embed)
+            print(f"✅ Đã gửi thông báo member leave: {member.name}")
         except Exception as e:
             print(f"❌ Lỗi khi gửi thông báo member leave: {e}")
 
@@ -431,10 +441,12 @@ async def mute_and_log(message, reason="vi phạm"):
             if msg.author == message.author and (datetime.now(timezone.utc) - msg.created_at).seconds <= TIME_WINDOW:
                 try:
                     await msg.delete()
-                except:
-                    pass
+                    print(f"✅ Đã xóa tin nhắn của {message.author.name}")
+                except Exception as e:
+                    print(f"❌ Lỗi khi xóa tin nhắn: {e}")
 
         await message.author.add_roles(mute_role)
+        print(f"✅ Đã mute {message.author.name} trong 15 phút")
 
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
         if log_channel:
@@ -447,9 +459,11 @@ async def mute_and_log(message, reason="vi phạm"):
             embed.add_field(name="Kênh", value=message.channel.mention, inline=True)
             embed.timestamp = datetime.now(timezone.utc)
             await log_channel.send(embed=embed)
+            print(f"✅ Đã gửi log vi phạm cho {message.author.name}")
 
         await asyncio.sleep(MUTE_TIME)
         await message.author.remove_roles(mute_role)
+        print(f"✅ Đã bỏ mute {message.author.name}")
 
     except Exception as e:
         print(f"❌ Lỗi mute_and_log: {e}")
@@ -556,8 +570,8 @@ async def on_message(message):
             # Hiệu ứng quay giống máy slot
             msg = await message.channel.send("🎰 Đang quay... |")
             spin_anim = ['|', '/', '-', '\\']
-            for i in range(6):  # 6 frame để mượt hơn
-                await asyncio.sleep(0.3)  # Thời gian mỗi frame
+            for i in range(6):
+                await asyncio.sleep(0.3)
                 temp_reels = [
                     reels[0] if i >= 2 else random.choice(symbols),
                     reels[1] if i >= 4 else random.choice(symbols),
@@ -759,8 +773,8 @@ async def on_interaction(interaction: discord.Interaction):
                             control_view.add_item(close_button)
                             await control_message.edit(view=control_view)
                             print(f"✅ Enabled control buttons after timeout in channel: {channel.name}")
-                        except:
-                            print(f"❌ Error enabling control buttons after timeout")
+                        except Exception as e:
+                            print(f"❌ Error enabling control buttons after timeout: {e}")
                     await channel.delete()
                     if channel.id in games:
                         del games[channel.id]
@@ -768,8 +782,8 @@ async def on_interaction(interaction: discord.Interaction):
                         del board_messages[channel.id]
                     if channel.id in control_messages:
                         del control_messages[channel.id]
-                except:
-                    pass
+                except Exception as e:
+                    print(f"❌ Lỗi khi xóa kênh caro: {e}")
                 break
             await asyncio.sleep(5)
 
@@ -857,8 +871,8 @@ async def on_interaction(interaction: discord.Interaction):
                                 control_view.add_item(close_button)
                                 await control_message.edit(view=control_view)
                                 print(f"✅ Enabled control buttons after timeout in channel: {channel.name}")
-                            except:
-                                print(f"❌ Error enabling control buttons after timeout")
+                            except Exception as e:
+                                print(f"❌ Error enabling control buttons after timeout: {e}")
                         await channel.delete()
                         if channel.id in games:
                             del games[channel.id]
@@ -866,8 +880,8 @@ async def on_interaction(interaction: discord.Interaction):
                             del board_messages[channel.id]
                         if channel.id in control_messages:
                             del control_messages[channel.id]
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"❌ Lỗi khi xóa kênh caro: {e}")
                     break
                 await asyncio.sleep(5)
 
@@ -894,9 +908,9 @@ async def on_interaction(interaction: discord.Interaction):
         try:
             _, row, col = custom_id.split("_")
             row, col = int(row), int(col)
-        except:
+        except Exception as e:
             await interaction.response.send_message("❌ Lỗi khi xử lý nước đi!", ephemeral=True)
-            print("❌ Error parsing caro move")
+            print(f"❌ Error parsing caro move: {e}")
             return
 
         game.board[row][col] = game.symbols[game.current_player]
@@ -929,8 +943,8 @@ async def on_interaction(interaction: discord.Interaction):
                         control_view.add_item(close_button)
                         await control_message.edit(view=control_view)
                         print(f"✅ Enabled control buttons after win in channel: {interaction.channel.name}")
-                    except:
-                        print(f"❌ Error enabling control buttons")
+                    except Exception as e:
+                        print(f"❌ Error enabling control buttons: {e}")
                 print(f"✅ Game ended: {interaction.user.name} wins")
                 return
             elif winner == "draw":
@@ -946,8 +960,8 @@ async def on_interaction(interaction: discord.Interaction):
                         control_view.add_item(close_button)
                         await control_message.edit(view=control_view)
                         print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
-                    except:
-                        print(f"❌ Error enabling control buttons")
+                    except Exception as e:
+                        print(f"❌ Error enabling control buttons: {e}")
                 print("✅ Game ended: Draw")
                 return
 
@@ -984,8 +998,8 @@ async def on_interaction(interaction: discord.Interaction):
                                 control_view.add_item(close_button)
                                 await control_message.edit(view=control_view)
                                 print(f"✅ Enabled control buttons after bot win in channel: {interaction.channel.name}")
-                            except:
-                                print(f"❌ Error enabling control buttons")
+                            except Exception as e:
+                                print(f"❌ Error enabling control buttons: {e}")
                         print("✅ Game ended: Bot wins")
                         return
                     elif winner == "draw":
@@ -1001,8 +1015,8 @@ async def on_interaction(interaction: discord.Interaction):
                                 control_view.add_item(close_button)
                                 await control_message.edit(view=control_view)
                                 print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
-                            except:
-                                print(f"❌ Error enabling control buttons")
+                            except Exception as e:
+                                print(f"❌ Error enabling control buttons: {e}")
                         print("✅ Game ended: Draw")
                         return
 
@@ -1060,7 +1074,7 @@ async def on_interaction(interaction: discord.Interaction):
                     control_view.add_item(close_button)
                     await control_message.edit(view=control_view)
                     print(f"✅ Updated control message (message_id: {control_messages[channel_id]}) in channel: {interaction.channel.name}")
-                except:
+                except Exception as e:
                     control_message = await interaction.channel.send(view=control_view)
                     control_messages[channel_id] = control_message.id
                     print(f"✅ Sent new control message (message_id: {control_message.id}) in channel: {interaction.channel.name}")
@@ -1083,8 +1097,8 @@ async def on_interaction(interaction: discord.Interaction):
             await interaction.channel.delete()
             await interaction.response.send_message("Ticket đã được đóng!", ephemeral=True)
             print(f"✅ Closed channel: {interaction.channel.name}")
-        except:
-            print("❌ Error closing channel")
+        except Exception as e:
+            print(f"❌ Error closing channel: {e}")
 
 # -------------------------
 # Run Bot
