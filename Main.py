@@ -7,15 +7,11 @@ from keep_alive import keep_alive
 import random
 import json
 import re
-from github import Github
-import base64
 
 # -------------------------
 # Cấu hình bot
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = "TobuTheXd/Bot-discord"  # Thay bằng tên repository
 FILE_PATH = "data.json"
 
 # Verify Config
@@ -51,7 +47,7 @@ control_messages = {}
 selected_board_size = {}
 
 # Link bị cấm
-BLOCK_LINKS = ["hentai", "porn", "xhamster" ]
+BLOCK_LINKS = ["hentai", "porn", "xhamster", "sex" ]
 
 # Từ cấm
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
@@ -59,45 +55,35 @@ BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "
 # Từ đáng ngờ cho thành viên mới (dưới 1 ngày)
 SUSPICIOUS_WORDS = ["xin hack roblox", "xin krnl", "xin delta x", "hack roblox", "krnl", "delta x"]
 
-# Khởi tạo dữ liệu từ GitHub
+# Khởi tạo dữ liệu từ file cục bộ
 data = {}
-g = Github(GITHUB_TOKEN) if GITHUB_TOKEN else None
-if g:
-    try:
-        repo = g.get_repo(REPO_NAME)
-        file = repo.get_contents(FILE_PATH)
-        loaded = json.loads(base64.b64decode(file.content).decode('utf-8'))
+try:
+    with open(FILE_PATH, 'r') as f:
+        loaded = json.load(f)
         data = {
             k: {
                 'last_daily': datetime.fromisoformat(v['last_daily']) if v['last_daily'] else None,
             } for k, v in loaded.items()
         }
-    except Exception as e:
-        print(f"❌ Lỗi khi đọc data.json từ GitHub: {e}")
-        data = {}
-        repo.create_file(FILE_PATH, "Create data.json", json.dumps(data, indent=2))
+except FileNotFoundError:
+    print(f"❌ Không tìm thấy {FILE_PATH}, tạo file mới")
+    with open(FILE_PATH, 'w') as f:
+        json.dump(data, f, indent=2)
+except Exception as e:
+    print(f"❌ Lỗi khi đọc {FILE_PATH}: {e}")
 
 def save_data():
-    if g:
-        try:
-            repo = g.get_repo(REPO_NAME)
+    try:
+        with open(FILE_PATH, 'w') as f:
             content = {
                 k: {
                     'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
                 } for k, v in data.items()
             }
-            try:
-                file = repo.get_contents(FILE_PATH)
-                repo.update_file(
-                    FILE_PATH,
-                    f"Update data.json {datetime.now(timezone.utc).isoformat()}",
-                    json.dumps(content, indent=2),
-                    file.sha
-                )
-            except:
-                repo.create_file(FILE_PATH, "Create data.json", json.dumps(content, indent=2))
-        except Exception as e:
-            print(f"❌ Lỗi khi đẩy data.json lên GitHub: {e}")
+            json.dump(content, f, indent=2)
+        print(f"✅ Đã lưu dữ liệu vào {FILE_PATH}")
+    except Exception as e:
+        print(f"❌ Lỗi khi lưu {FILE_PATH}: {e}")
 
 # Intents
 intents = discord.Intents.default()
@@ -483,9 +469,21 @@ async def on_message(message):
         has_suspicious_word = any(word in content_lower for word in SUSPICIOUS_WORDS)
         if has_suspicious_word:
             try:
-                await message.channel.send(
-                    f"⚠️ **Cảnh báo**: Thành viên {member.mention} chưa đủ 1 ngày trong server để gửi các nội dung như trên. Cân nhắc khi gửi!",
-                    ephemeral=True
+                # Gửi tin nhắn công khai nhưng tạm chặn người gửi xem
+                warning_message = await message.channel.send(
+                    f"⚠️ **Cảnh báo**: Thành viên {member.mention} chưa đủ 1 ngày trong server để gửi các nội dung như trên. Cân nhắc khi gửi!"
+                )
+                # Tạm thời chặn người gửi xem tin nhắn
+                await message.channel.set_permissions(
+                    member,
+                    overwrite=discord.PermissionOverwrite(view_channel=True, read_messages=False),
+                    reason="Tạm chặn xem tin nhắn cảnh báo"
+                )
+                await asyncio.sleep(10)  # Chờ 10 giây
+                await message.channel.set_permissions(
+                    member,
+                    overwrite=None,
+                    reason="Khôi phục quyền mặc định"
                 )
                 print(f"✅ Đã gửi cảnh báo thành viên mới trong kênh {message.channel.name} cho {member.name}")
             except Exception as e:
@@ -918,7 +916,5 @@ keep_alive()
 
 if not DISCORD_TOKEN:
     print("❌ Chưa đặt DISCORD_TOKEN")
-elif not GITHUB_TOKEN:
-    print("❌ Chưa đặt GITHUB_TOKEN")
 else:
     bot.run(DISCORD_TOKEN)
