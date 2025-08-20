@@ -15,7 +15,7 @@ import base64
 # -------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = "TobuTheXd/Bot-discord"  # Thay bằng tên repository (ví dụ: "yourusername/discord-bot")
+REPO_NAME = "TobuTheXd/Bot-discord"  # Thay bằng tên repository
 FILE_PATH = "data.json"
 
 # Verify Config
@@ -30,7 +30,8 @@ SUPPORTERS = ["__tobu", "caycotbietmua"]
 # Anti-Spam & Filter Config
 SPAM_LIMIT = 5
 TIME_WINDOW = 30  # giây
-MUTE_TIME = 900  # 15 phút
+MUTE_TIME_BADWORD = 900  # 15 phút
+MUTE_TIME_LINK = 86400  # 1 ngày
 MUTE_ROLE_ID = 1402205863510282240
 LOG_CHANNEL_ID = 1402205862985994361
 
@@ -50,16 +51,13 @@ control_messages = {}
 selected_board_size = {}
 
 # Link bị cấm
-BLOCK_LINKS = ["youtube.com", "facebook.com"]
+BLOCK_LINKS = ["hentai", "porn", "xhamster" ]
 
 # Từ cấm
 BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "bitch", "dm", "cc"]
 
-# Slot Config
-SLOT_CHANNEL_ID = 1234567890  # Thay bằng ID kênh slot cố định
-ADMIN_ROLE_ID = 9876543210  # Thay bằng ID vai trò admin
-symbols = ['🍒', '🍋', '🍉', '7', '⭐', '💎']
-multipliers = [2, 3, 4, 5, 10, 20]
+# Từ đáng ngờ cho thành viên mới (dưới 1 ngày)
+SUSPICIOUS_WORDS = ["xin hack roblox", "xin krnl", "xin delta x", "hack roblox", "krnl", "delta x"]
 
 # Khởi tạo dữ liệu từ GitHub
 data = {}
@@ -71,11 +69,7 @@ if g:
         loaded = json.loads(base64.b64decode(file.content).decode('utf-8'))
         data = {
             k: {
-                'money': v['money'],
                 'last_daily': datetime.fromisoformat(v['last_daily']) if v['last_daily'] else None,
-                'spin_count': v.get('spin_count', 0),
-                'ban_until': datetime.fromisoformat(v['ban_until']) if v['ban_until'] else None,
-                'spin_timestamps': [datetime.fromisoformat(t) for t in v.get('spin_timestamps', [])]
             } for k, v in loaded.items()
         }
     except Exception as e:
@@ -89,11 +83,7 @@ def save_data():
             repo = g.get_repo(REPO_NAME)
             content = {
                 k: {
-                    'money': v['money'],
                     'last_daily': v['last_daily'].isoformat() if v['last_daily'] else None,
-                    'spin_count': v.get('spin_count', 0),
-                    'ban_until': v['ban_until'].isoformat() if v['ban_until'] else None,
-                    'spin_timestamps': [t.isoformat() for t in v.get('spin_timestamps', [])]
                 } for k, v in data.items()
             }
             try:
@@ -108,25 +98,6 @@ def save_data():
                 repo.create_file(FILE_PATH, "Create data.json", json.dumps(content, indent=2))
         except Exception as e:
             print(f"❌ Lỗi khi đẩy data.json lên GitHub: {e}")
-
-def get_weights(tier):
-    w = [100 - 5 * tier, 90 - 4 * tier, 80 - 3 * tier, 70 - 2 * tier, 50 + 5 * tier, 30 + 15 * tier]
-    w = [max(10, x) for x in w]
-    return w
-
-def spin(tier):
-    weights = get_weights(tier)
-    reels = random.choices(symbols, weights=weights, k=3)
-    return reels
-
-def get_payout(reels, bet):
-    if reels[0] == reels[1] == reels[2]:
-        idx = symbols.index(reels[0])
-        return bet * multipliers[idx]
-    elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-        return int(bet * 1.5)
-    else:
-        return int(bet * 0.5)
 
 # Intents
 intents = discord.Intents.default()
@@ -430,7 +401,7 @@ async def on_member_remove(member):
 # -------------------------
 # Mute + Xóa tin nhắn + Log
 # -------------------------
-async def mute_and_log(message, reason="vi phạm"):
+async def mute_and_log(message, reason="vi phạm", mute_time=900):
     try:
         mute_role = message.guild.get_role(MUTE_ROLE_ID)
         if not mute_role:
@@ -446,22 +417,23 @@ async def mute_and_log(message, reason="vi phạm"):
                     print(f"❌ Lỗi khi xóa tin nhắn: {e}")
 
         await message.author.add_roles(mute_role)
-        print(f"✅ Đã mute {message.author.name} trong 15 phút")
+        print(f"✅ Đã mute {message.author.name} trong {mute_time // 60} phút")
 
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             embed = discord.Embed(
                 title="🚨 Phát hiện vi phạm",
-                description=f"**Người vi phạm:** {message.author.mention}\n**Lý do:** {reason}\n**Thời gian mute:** 15 phút",
+                description=f"**Người vi phạm:** {message.author.mention}\n**Lý do:** {reason}\n**Thời gian mute:** {mute_time // 60} phút",
                 color=discord.Color.red()
             )
-            embed.add_field(name="Nội dung", value=message.content or "*Không có nội dung*", inline=False)
+            embed.add_field(name="Nội dung", value=f"||{message.content or '*Không có nội dung*'}||", inline=False)
             embed.add_field(name="Kênh", value=message.channel.mention, inline=True)
+            embed.add_field(name="Lưu ý", value="Cân nhắc khi xem", inline=False)
             embed.timestamp = datetime.now(timezone.utc)
             await log_channel.send(embed=embed)
             print(f"✅ Đã gửi log vi phạm cho {message.author.name}")
 
-        await asyncio.sleep(MUTE_TIME)
+        await asyncio.sleep(mute_time)
         await message.author.remove_roles(mute_role)
         print(f"✅ Đã bỏ mute {message.author.name}")
 
@@ -469,7 +441,7 @@ async def mute_and_log(message, reason="vi phạm"):
         print(f"❌ Lỗi mute_and_log: {e}")
 
 # -------------------------
-# On Message (Filter + Anti-Spam + Slot Commands)
+# On Message (Filter + Anti-Spam)
 # -------------------------
 user_messages = {}
 
@@ -486,14 +458,14 @@ async def on_message(message):
     has_bad_word = any(bad_word in non_url_content for bad_word in BAD_WORDS)
 
     if has_bad_word:
-        await mute_and_log(message, "dùng từ ngữ tục tĩu")
+        await mute_and_log(message, "dùng từ ngữ tục tĩu", MUTE_TIME_BADWORD)
         return
 
     if any(block in content_lower for block in BLOCK_LINKS):
-        await mute_and_log(message, "gửi link bị cấm")
+        await mute_and_log(message, "gửi link bị cấm", MUTE_TIME_LINK)
         return
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     uid = message.author.id
     if uid not in user_messages:
         user_messages[uid] = []
@@ -501,184 +473,23 @@ async def on_message(message):
     user_messages[uid] = [t for t in user_messages[uid] if now - t < timedelta(seconds=TIME_WINDOW)]
 
     if len(user_messages[uid]) > SPAM_LIMIT:
-        await mute_and_log(message, "spam tin nhắn")
+        await mute_and_log(message, "spam tin nhắn", MUTE_TIME_BADWORD)
         user_messages[uid] = []
         return
 
-    # Slot commands in specific channel without prefix
-    if message.channel.id == SLOT_CHANNEL_ID:
-        content = message.content.lower().strip().split()
-        if not content:
-            return
-
-        cmd = content[0]
-        user_id = str(message.author.id)
-
-        if cmd == 'help':
-            help_msg = "Hướng dẫn chơi:\n" \
-                       "- spin <số tiền>: Quay slot (cược >=100). Cược cao hơn tăng tier (bet//1000, max 5), tăng mạnh xác suất trúng item xịn.\n" \
-                       "- Không trùng: Nhận lại 50% tiền cược.\n" \
-                       "- Trùng 2 biểu tượng: Nhận 1.5x tiền cược.\n" \
-                       "- Trùng 3 biểu tượng: Nhận 2x-20x tiền cược tùy biểu tượng.\n" \
-                       "- gift @user <số tiền>: Tặng tiền cho người khác.\n" \
-                       "- daily: Nhận 5k tiền hàng ngày.\n" \
-                       "- leaderboard: Xem bảng xếp hạng tiền.\n" \
-                       "- add @user <số tiền>: Admin thêm tiền (có thể âm).\n" \
-                       "- mod @user <số tiền>: Admin set tiền.\n" \
-                       "Lưu ý: Quay 10 lần trong 1 phút sẽ bị 'cảnh sát bắt' (đùa thôi), mất hết tiền và ban chơi 1 ngày."
-            await message.channel.send(help_msg)
-            return
-
-        if user_id not in data:
-            data[user_id] = {'money': 10000, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
-            save_data()
-
-        if cmd == 'spin':
-            if len(content) < 2:
-                await message.channel.send("Sử dụng: spin <số tiền cược>")
-                return
+    # Kiểm tra thành viên mới gửi tin nhắn đáng ngờ
+    member = message.author
+    if member.joined_at and (now - member.joined_at) < timedelta(days=1):
+        has_suspicious_word = any(word in content_lower for word in SUSPICIOUS_WORDS)
+        if has_suspicious_word:
             try:
-                bet = int(content[1])
-                if bet < 100:
-                    await message.channel.send("Cược tối thiểu là 100")
-                    return
-            except ValueError:
-                await message.channel.send("Số tiền cược không hợp lệ")
-                return
-
-            user_data = data[user_id]
-            now = datetime.now(timezone.utc)
-            if user_data['ban_until'] and user_data['ban_until'] > now:
-                await message.channel.send("Bạn bị ban chơi trong 1 ngày do bị 'cảnh sát bắt' (đùa thôi)!")
-                return
-
-            money = user_data['money']
-            if money < bet:
-                await message.channel.send("Không đủ tiền")
-                return
-
-            # Cập nhật danh sách thời gian quay
-            user_data['spin_timestamps'] = [t for t in user_data.get('spin_timestamps', []) if (now - t).total_seconds() <= 60]
-            user_data['spin_timestamps'].append(now)
-            user_data['money'] -= bet
-            user_data['spin_count'] += 1
-            save_data()
-
-            tier = min(bet // 1000, 5)
-            reels = spin(tier)
-
-            # Hiệu ứng quay giống máy slot
-            msg = await message.channel.send("🎰 Đang quay... |")
-            spin_anim = ['|', '/', '-', '\\']
-            for i in range(6):
-                await asyncio.sleep(0.3)
-                temp_reels = [
-                    reels[0] if i >= 2 else random.choice(symbols),
-                    reels[1] if i >= 4 else random.choice(symbols),
-                    reels[2] if i >= 6 else random.choice(symbols)
-                ]
-                anim_char = spin_anim[i % len(spin_anim)]
-                await msg.edit(content=f"🎰 Đang quay... {anim_char} {' '.join(temp_reels)}")
-
-            final_reels = ' '.join(reels)
-            payout = get_payout(reels, bet)
-            net = payout - bet
-
-            user_data['money'] += payout
-            save_data()
-
-            if reels[0] == reels[1] == reels[2]:
-                await msg.edit(content=f"🎰 {final_reels} Bạn thắng lớn {net}! (Tổng {payout}) Tiền: {user_data['money']}")
-            elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                await msg.edit(content=f"🎰 {final_reels} Trùng 2! Thắng {net}! (Tổng {payout}) Tiền: {user_data['money']}")
-            else:
-                await msg.edit(content=f"🎰 {final_reels} Không trùng! Nhận lại {payout}. Tiền: {user_data['money']}")
-
-            # Check for 'police catch' after spin
-            if len(user_data['spin_timestamps']) >= 10:
-                await message.channel.send("🚔 Bạn bị 'cảnh sát bắt' (đùa thôi)! Mất hết tiền và không chơi được trong 1 ngày.")
-                user_data['money'] = 0
-                user_data['ban_until'] = now + timedelta(days=1)
-                user_data['spin_timestamps'] = []
-                user_data['spin_count'] = 0
-                save_data()
-
-        elif cmd == 'gift':
-            if len(content) < 3 or not message.mentions:
-                await message.channel.send("Sử dụng: gift @người_dùng <số_tiền>")
-                return
-            target = message.mentions[0]
-            if target.bot or target.id == message.author.id:
-                return
-            try:
-                amount = int(content[2])
-                if amount <= 0:
-                    return
-            except ValueError:
-                return
-
-            user_data = data[user_id]
-            if user_data['money'] < amount:
-                await message.channel.send("Không đủ tiền")
-                return
-
-            target_id = str(target.id)
-            if target_id not in data:
-                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
-
-            user_data['money'] -= amount
-            data[target_id]['money'] += amount
-            save_data()
-
-            await message.channel.send(f"Tặng {amount} cho {target.mention}")
-
-        elif cmd == 'daily':
-            user_data = data[user_id]
-            last = user_data['last_daily']
-            today = datetime.now(timezone.utc).date()
-            if last is None or last.date() < today:
-                user_data['money'] += 5000
-                user_data['last_daily'] = datetime.now(timezone.utc)
-                save_data()
-                await message.channel.send(f"Nhận 5k hàng ngày! Tiền: {user_data['money']}")
-            else:
-                await message.channel.send("Đã nhận hôm nay rồi.")
-
-        elif cmd == 'leaderboard':
-            sorted_users = sorted(data.items(), key=lambda x: x[1]['money'], reverse=True)[:10]
-            msg = "Bảng xếp hạng:\n"
-            for i, (uid, d) in enumerate(sorted_users, 1):
-                user = bot.get_user(int(uid))
-                name = user.name if user else uid
-                msg += f"{i}. {name}: {d['money']}\n"
-            await message.channel.send(msg)
-
-        elif cmd in ['add', 'mod']:
-            is_admin = any(role.id == ADMIN_ROLE_ID for role in message.author.roles)
-            if not is_admin:
-                return
-            if len(content) < 3 or not message.mentions:
-                await message.channel.send(f"Sử dụng: {cmd} @người_dùng <số_tiền>")
-                return
-            target = message.mentions[0]
-            if target.bot:
-                return
-            try:
-                amount = int(content[2])
-            except ValueError:
-                return
-
-            target_id = str(target.id)
-            if target_id not in data:
-                data[target_id] = {'money': 0, 'last_daily': None, 'spin_count': 0, 'ban_until': None, 'spin_timestamps': []}
-
-            if cmd == 'add':
-                data[target_id]['money'] += amount
-            elif cmd == 'mod':
-                data[target_id]['money'] = amount
-            save_data()
-
-            await message.channel.send(f"Đã {cmd} tiền cho {target.mention} thành {data[target_id]['money']}")
+                await message.channel.send(
+                    f"⚠️ **Cảnh báo**: Thành viên {member.mention} chưa đủ 1 ngày trong server để gửi các nội dung như trên. Cân nhắc khi gửi!",
+                    ephemeral=True
+                )
+                print(f"✅ Đã gửi cảnh báo thành viên mới trong kênh {message.channel.name} cho {member.name}")
+            except Exception as e:
+                print(f"❌ Lỗi khi gửi cảnh báo thành viên mới: {e}")
 
     await bot.process_commands(message)
 
