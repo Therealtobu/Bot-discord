@@ -394,24 +394,6 @@ async def on_ready():
     print(f"Current directory: {os.getcwd()}")
 
     try:
-        # Tự tạo role Verify Bậc 2 nếu chưa tồn tại (tùy chọn)
-        guild = bot.get_guild(GUILD_ID)
-        role2 = discord.utils.get(guild.roles, id=ROLE2_ID)
-        if not role2:
-            try:
-                role2 = await guild.create_role(
-                    name="Verify Bậc 2",
-                    permissions=discord.Permissions(connect=True, send_messages=True),
-                    color=discord.Color.blue(),
-                    hoist=True,
-                    mentionable=True
-                )
-                print(f"✅ Đã tạo role Verify Bậc 2 với ID: {role2.id}")
-                global ROLE2_ID
-                ROLE2_ID = role2.id
-            except Exception as e:
-                print(f"❌ Lỗi khi tạo role Verify Bậc 2: {e}")
-
         # Verify Embed cho bậc 1
         verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
         if verify_channel:
