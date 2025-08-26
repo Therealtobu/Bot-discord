@@ -7,6 +7,9 @@ from keep_alive import keep_alive
 import random
 import json
 import re
+import smtplib
+from email.mime.text import MIMEText
+import sqlite3
 
 # -------------------------
 # Cấu hình bot
@@ -15,8 +18,14 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 FILE_PATH = "data.json"
 
 # Verify Config
-ROLE_ID = 1400724722714542111
-VERIFY_CHANNEL_ID = 1400732340677771356
+ROLE1_ID = 1400724722714542111  # Verify Bậc 1
+ROLE2_ID = 1409758314048520245  # Verify Bậc 2 - Bổ sung ID thực tế
+VERIFY_CHANNEL_ID = 1400732340677771356  # Kênh verify bậc 1
+VERIFY2_CHANNEL_ID = 1409758117398581320  # Kênh cố định cho verify bậc 2 - Bổ sung sau
+
+# Email Config cho verify bậc 2
+SENDER_EMAIL = 'botbotbot201303@gmail.com'  # Bổ sung email bot
+SENDER_PASSWORD = '3.3.2013'  # Bổ sung app password
 
 # Ticket Config
 GUILD_ID = 1372215595218505891
@@ -54,6 +63,15 @@ BAD_WORDS = ["đm", "địt", "lồn", "buồi", "cặc", "mẹ mày", "fuck", "
 
 # Từ đáng ngờ cho thành viên mới (dưới 1 ngày)
 SUSPICIOUS_WORDS = ["xin hack roblox", "xin krnl", "xin delta x", "hack roblox", "krnl", "delta x"]
+
+# Setup database cho email unique
+conn = sqlite3.connect('emails.db')
+cur = conn.cursor()
+cur.execute('''CREATE TABLE IF NOT EXISTS emails (email TEXT UNIQUE, user_id INTEGER)''')
+conn.commit()
+
+# Dict để lưu thời gian nhắn tin cuối cùng cho verify bậc 1
+last_messages = {}
 
 # Khởi tạo dữ liệu từ file cục bộ
 data = {}
@@ -154,22 +172,22 @@ class CaroGame:
         return None
 
 # -------------------------
-# Verify Button
+# Verify Button cho bậc 1
 # -------------------------
 class VerifyButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅ Verify / Xác Thực", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="✅ Verify / Xác Thực Bậc 1", style=discord.ButtonStyle.success)
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(ROLE_ID)
+        role1 = interaction.guild.get_role(ROLE1_ID)
         member = interaction.user
 
-        if role in member.roles:
-            await interaction.response.send_message("✅ Bạn đã được xác thực trước đó!", ephemeral=True)
+        if role1 in member.roles:
+            await interaction.response.send_message("✅ Bạn đã được xác thực bậc 1 trước đó!", ephemeral=True)
         else:
-            await member.add_roles(role)
-            await interaction.response.send_message("🎉 Bạn đã được xác thực thành công!", ephemeral=True)
+            await member.add_roles(role1)
+            await interaction.response.send_message("🎉 Bạn đã được xác thực bậc 1 thành công! Sử dụng /verify để lên bậc 2.", ephemeral=True)
 
 # -------------------------
 # Ticket Buttons
@@ -235,26 +253,34 @@ async def on_ready():
     print(f"Current directory: {os.getcwd()}")
 
     try:
-        # Verify Embed
+        # Verify Embed cho bậc 1
         verify_channel = bot.get_channel(VERIFY_CHANNEL_ID)
         if verify_channel:
-            print(f"✅ Tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
+            print(f"✅ Tìm thấy kênh verify bậc 1: {VERIFY_CHANNEL_ID}")
             async for msg in verify_channel.history(limit=50):
                 if msg.author == bot.user:
                     try:
                         await msg.delete()
-                        print(f"✅ Đã xóa tin nhắn cũ trong kênh verify")
+                        print(f"✅ Đã xóa tin nhắn cũ trong kênh verify bậc 1")
                     except Exception as e:
-                        print(f"❌ Lỗi khi xóa tin nhắn cũ trong verify: {e}")
+                        print(f"❌ Lỗi khi xóa tin nhắn cũ trong verify bậc 1: {e}")
             embed = discord.Embed(
-                title="Xác Thực Thành Viên",
-                description="Bấm nút **Verify/Xác Thực** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
+                title="Xác Thực Thành Viên Bậc 1",
+                description="Bấm nút **Verify/Xác Thực Bậc 1** ở dưới để có thể tương tác trong nhóm\n⬇️⬇️⬇️",
                 color=discord.Color.green()
             )
             await verify_channel.send(embed=embed, view=VerifyButton())
-            print(f"✅ Đã gửi embed verify đến kênh {verify_channel.name}")
+            print(f"✅ Đã gửi embed verify bậc 1 đến kênh {verify_channel.name}")
         else:
-            print(f"❌ Không tìm thấy kênh verify: {VERIFY_CHANNEL_ID}")
+            print(f"❌ Không tìm thấy kênh verify bậc 1: {VERIFY_CHANNEL_ID}")
+
+        # Verify Embed cho bậc 2 (nếu cần gửi embed ban đầu, nhưng command sẽ xử lý)
+        verify2_channel = bot.get_channel(VERIFY2_CHANNEL_ID)
+        if verify2_channel:
+            print(f"✅ Tìm thấy kênh verify bậc 2: {VERIFY2_CHANNEL_ID}")
+            # Có thể gửi hướng dẫn sử dụng /verify ở đây nếu cần
+        else:
+            print(f"❌ Không tìm thấy kênh verify bậc 2: {VERIFY2_CHANNEL_ID}")
 
         # Ticket Embed
         ticket_channel = bot.get_channel(TICKET_CHANNEL_ID)
@@ -427,7 +453,7 @@ async def mute_and_log(message, reason="vi phạm", mute_time=900):
         print(f"❌ Lỗi mute_and_log: {e}")
 
 # -------------------------
-# On Message (Filter + Anti-Spam)
+# On Message (Filter + Anti-Spam + Verify Limit)
 # -------------------------
 user_messages = {}
 
@@ -435,6 +461,27 @@ user_messages = {}
 async def on_message(message):
     if message.author.bot:
         return
+
+    guild = message.guild
+    member = guild.get_member(message.author.id)
+    role1 = guild.get_role(ROLE1_ID)
+    role2 = guild.get_role(ROLE2_ID)
+
+    # Xử lý giới hạn tin nhắn cho role bậc 1
+    if role2 in member.roles:
+        pass  # Không giới hạn
+    elif role1 in member.roles:
+        user_id = message.author.id
+        now = datetime.now()
+
+        if user_id in last_messages:
+            delta = now - last_messages[user_id]
+            if delta.total_seconds() < 60:
+                await message.delete()
+                await message.author.send("Bạn cần xác thực mức 2 để có thể không giới hạn lượt nhắn và không được tham gia vào nhóm thoại")
+                return
+
+        last_messages[user_id] = now
 
     content_lower = message.content.lower()
 
@@ -490,6 +537,156 @@ async def on_message(message):
                 print(f"❌ Lỗi khi gửi cảnh báo thành viên mới: {e}")
 
     await bot.process_commands(message)
+
+# -------------------------
+# Slash command để verify bậc 2
+# -------------------------
+@bot.slash_command(name='verify', description='Bắt đầu xác thực bậc 2')
+async def verify(ctx: discord.ApplicationContext):
+    if ctx.channel.id != VERIFY2_CHANNEL_ID:
+        await ctx.respond("Lệnh này chỉ hoạt động ở kênh xác thực bậc 2.", ephemeral=True)
+        return
+
+    member = ctx.author
+    role1 = ctx.guild.get_role(ROLE1_ID)
+    role2 = ctx.guild.get_role(ROLE2_ID)
+
+    if role2 in member.roles:
+        await ctx.respond("Bạn đã xác thực bậc 2.", ephemeral=True)
+        return
+
+    if role1 not in member.roles:
+        await ctx.respond("Bạn cần role bậc 1 để xác thực bậc 2.", ephemeral=True)
+        return
+
+    embed = discord.Embed(title="Xác thực bậc 2", description="Bấm nút ở dưới để bắt đầu nhiệm vụ xác thực", color=discord.Color.blue())
+    view = discord.ui.View(timeout=300)
+
+    button = discord.ui.Button(label="Bắt đầu", style=discord.ButtonStyle.primary)
+
+    async def button_callback(interaction: discord.Interaction):
+        if interaction.user != ctx.author:
+            await interaction.response.send_message("Đây không phải cho bạn.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Kiểm tra tin nhắn riêng (DM).", ephemeral=True)
+
+        user = interaction.user
+        await user.send("Vui lòng gửi địa chỉ Gmail của bạn để xác thực. (Mỗi Gmail chỉ dùng cho 1 tài khoản Discord)")
+
+        def check(m):
+            return m.author == user and isinstance(m.channel, discord.DMChannel)
+
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=300)
+            email = msg.content.strip().lower()
+
+            # Kiểm tra email đã tồn tại
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM emails WHERE email=?', (email,))
+            if cur.fetchone():
+                await user.send("Email này đã được sử dụng cho tài khoản khác.")
+                return
+
+            # Generate code 4 chữ số
+            code = random.randint(1000, 9999)
+            str_code = str(code)
+
+            # Gửi email
+            email_msg = MIMEText(f"Mã xác thực của bạn là: {code}")
+            email_msg['Subject'] = 'Mã Xác Thực Discord'
+            email_msg['From'] = SENDER_EMAIL
+            email_msg['To'] = email
+
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(SENDER_EMAIL, SENDER_PASSWORD)
+                server.sendmail(SENDER_EMAIL, email, email_msg.as_string())
+
+            await user.send("Đã gửi mã đến email của bạn. Vui lòng nhập mã bằng cách bấm các nút số bên dưới.")
+
+            # View cho bàn phím số
+            class KeypadView(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=300)
+                    self.code_input = ""
+                    self.real_code = str_code
+
+                async def add_digit(self, digit, interaction):
+                    if len(self.code_input) < 4:
+                        self.code_input += digit
+                        await interaction.response.edit_message(content=f"Nhập mã: {'*' * len(self.code_input)} (đã nhập {len(self.code_input)} chữ số)")
+
+                @discord.ui.button(label="1", style=discord.ButtonStyle.secondary, row=0)
+                async def one(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("1", interaction)
+
+                @discord.ui.button(label="2", style=discord.ButtonStyle.secondary, row=0)
+                async def two(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("2", interaction)
+
+                @discord.ui.button(label="3", style=discord.ButtonStyle.secondary, row=0)
+                async def three(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("3", interaction)
+
+                @discord.ui.button(label="4", style=discord.ButtonStyle.secondary, row=1)
+                async def four(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("4", interaction)
+
+                @discord.ui.button(label="5", style=discord.ButtonStyle.secondary, row=1)
+                async def five(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("5", interaction)
+
+                @discord.ui.button(label="6", style=discord.ButtonStyle.secondary, row=1)
+                async def six(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("6", interaction)
+
+                @discord.ui.button(label="7", style=discord.ButtonStyle.secondary, row=2)
+                async def seven(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("7", interaction)
+
+                @discord.ui.button(label="8", style=discord.ButtonStyle.secondary, row=2)
+                async def eight(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("8", interaction)
+
+                @discord.ui.button(label="9", style=discord.ButtonStyle.secondary, row=2)
+                async def nine(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("9", interaction)
+
+                @discord.ui.button(label="0", style=discord.ButtonStyle.secondary, row=3)
+                async def zero(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    await self.add_digit("0", interaction)
+
+                @discord.ui.button(label="Xóa", style=discord.ButtonStyle.danger, row=3)
+                async def clear(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    self.code_input = ""
+                    await interaction.response.edit_message(content="Nhập mã: (đã xóa)")
+
+                @discord.ui.button(label="Xác thực", style=discord.ButtonStyle.success, row=3)
+                async def verify_btn(self, button: discord.ui.Button, interaction: discord.Interaction):
+                    if self.code_input == self.real_code:
+                        role2 = ctx.guild.get_role(ROLE2_ID)
+                        await member.add_roles(role2)
+                        # Optional: remove role1 if needed
+                        # await member.remove_roles(role1)
+                        cur.execute('INSERT INTO emails VALUES (?, ?)', (email, user.id))
+                        conn.commit()
+                        await interaction.response.send_message("Xác thực thành công! Bạn giờ có role Verify Bậc 2.", ephemeral=True)
+                        self.stop()
+                    else:
+                        await interaction.response.send_message("Mã sai. Hãy thử lại.", ephemeral=True)
+
+            keypad_view = KeypadView()
+            input_msg = await user.send("Nhập mã: ", view=keypad_view)
+
+        except asyncio.TimeoutError:
+            await user.send("Hết thời gian xác thực.")
+        except Exception as e:
+            await user.send(f"Lỗi: {str(e)}")
+
+    button.callback = button_callback
+    view.add_item(button)
+
+    await ctx.respond(embed=embed, view=view)
 
 # -------------------------
 # Caro Interaction Handler
