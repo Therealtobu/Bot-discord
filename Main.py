@@ -939,7 +939,7 @@ async def on_interaction(interaction: discord.Interaction):
                     close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
                     replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
                     control_view.add_item(replay_button)
-                    control_view.add_item(close
+                    control_view.add_item(close)
 
 # (Phần đầu đã được gửi trước đó, tiếp tục từ đây)
 
