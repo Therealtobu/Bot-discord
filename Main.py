@@ -939,131 +939,123 @@ async def on_interaction(interaction: discord.Interaction):
                     close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
                     replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
                     control_view.add_item(replay_button)
-                    control_view.add_item(close)
+                    control_view.add_item(close_button)
+                    await control_message.edit(view=control_view)
+                    print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
+                except Exception as e:
+                    print(f"❌ Error enabling control buttons: {e}")
+            return
 
-# (Phần đầu đã được gửi trước đó, tiếp tục từ đây)
+        if game.is_bot:
+            game.current_player = game.player2
+            bot_move = game.bot_move()
+            if bot_move:
+                row, col = bot_move
+                game.board[row][col] = game.symbols[game.player2]
+                game.last_move_time = asyncio.get_event_loop().time()
+                winner = game.check_winner(game.symbols[game.player2])
+                game.create_board()
 
-            control_view = discord.ui.View()
-            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
-            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
-            control_view.add_item(replay_button)
-            control_view.add_item(close_button)
-            await control_message.edit(view=control_view)
-            print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
-        except Exception as e:
-            print(f"❌ Error enabling control buttons: {e}")
-        return
+                view = discord.ui.View()
+                component_count = 0
+                for row in game.buttons:
+                    for button in row:
+                        if component_count < 23:
+                            view.add_item(button)
+                            component_count += 1
+                        else:
+                            print(f"❌ Skipped adding button: Maximum components reached")
 
-    if game.is_bot:
-        game.current_player = game.player2
-        bot_move = game.bot_move()
-        if bot_move:
-            row, col = bot_move
-            game.board[row][col] = game.symbols[game.player2]
-            game.last_move_time = asyncio.get_event_loop().time()
-            winner = game.check_winner(game.symbols[game.player2])
-            game.create_board()
+                if winner == True:
+                    embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
+                    await interaction.response.edit_message(embed=embed, view=view)
+                    if channel_id in control_messages:
+                        try:
+                            control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                            control_view = discord.ui.View()
+                            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
+                            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
+                            control_view.add_item(replay_button)
+                            control_view.add_item(close_button)
+                            await control_message.edit(view=control_view)
+                            print(f"✅ Enabled control buttons after bot win in channel: {interaction.channel.name}")
+                        except Exception as e:
+                            print(f"❌ Error enabling control buttons: {e}")
+                    return
+                elif winner == "draw":
+                    embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
+                    await interaction.response.edit_message(embed=embed, view=view)
+                    if channel_id in control_messages:
+                        try:
+                            control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                            control_view = discord.ui.View()
+                            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
+                            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
+                            control_view.add_item(replay_button)
+                            control_view.add_item(close_button)
+                            await control_message.edit(view=control_view)
+                            print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
+                        except Exception as e:
+                            print(f"❌ Error enabling control buttons: {e}")
+                    return
 
-            view = discord.ui.View()
-            component_count = 0
-            for row in game.buttons:
-                for button in row:
-                    if component_count < 23:
-                        view.add_item(button)
-                        component_count += 1
-                    else:
-                        print(f"❌ Skipped adding button: Maximum components reached")
+        await interaction.response.edit_message(embed=embed, view=view)
+        game.current_player = game.player2 if game.current_player == game.player1 else game.player1
+        if game.is_bot and game.current_player == game.player2:
+            await asyncio.sleep(1)  # Đợi 1 giây để tránh spam
+            bot_move = game.bot_move()
+            if bot_move:
+                row, col = bot_move
+                game.board[row][col] = game.symbols[game.player2]
+                game.last_move_time = asyncio.get_event_loop().time()
+                winner = game.check_winner(game.symbols[game.player2])
+                game.create_board()
 
-            if winner == True:
-                embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
-                await interaction.response.edit_message(embed=embed, view=view)
-                if channel_id in control_messages:
-                    try:
-                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
-                        control_view = discord.ui.View()
-                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
-                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
-                        control_view.add_item(replay_button)
-                        control_view.add_item(close_button)
-                        await control_message.edit(view=control_view)
-                        print(f"✅ Enabled control buttons after bot win in channel: {interaction.channel.name}")
-                    except Exception as e:
-                        print(f"❌ Error enabling control buttons: {e}")
-                return
-            elif winner == "draw":
-                embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
-                await interaction.response.edit_message(embed=embed, view=view)
-                if channel_id in control_messages:
-                    try:
-                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
-                        control_view = discord.ui.View()
-                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
-                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
-                        control_view.add_item(replay_button)
-                        control_view.add_item(close_button)
-                        await control_message.edit(view=control_view)
-                        print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
-                    except Exception as e:
-                        print(f"❌ Error enabling control buttons: {e}")
-                return
+                view = discord.ui.View()
+                component_count = 0
+                for row in game.buttons:
+                    for button in row:
+                        if component_count < 23:
+                            view.add_item(button)
+                            component_count += 1
+                        else:
+                            print(f"❌ Skipped adding button: Maximum components reached")
 
-    await interaction.response.edit_message(embed=embed, view=view)
-    game.current_player = game.player2 if game.current_player == game.player1 else game.player1
-    if game.is_bot and game.current_player == game.player2:
-        await asyncio.sleep(1)  # Đợi 1 giây để tránh spam
-        bot_move = game.bot_move()
-        if bot_move:
-            row, col = bot_move
-            game.board[row][col] = game.symbols[game.player2]
-            game.last_move_time = asyncio.get_event_loop().time()
-            winner = game.check_winner(game.symbols[game.player2])
-            game.create_board()
+                if winner == True:
+                    embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
+                    await interaction.followup.send(embed=embed, view=view)
+                    if channel_id in control_messages:
+                        try:
+                            control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                            control_view = discord.ui.View()
+                            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
+                            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
+                            control_view.add_item(replay_button)
+                            control_view.add_item(close_button)
+                            await control_message.edit(view=control_view)
+                            print(f"✅ Enabled control buttons after bot win in channel: {interaction.channel.name}")
+                        except Exception as e:
+                            print(f"❌ Error enabling control buttons: {e}")
+                    return
+                elif winner == "draw":
+                    embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
+                    await interaction.followup.send(embed=embed, view=view)
+                    if channel_id in control_messages:
+                        try:
+                            control_message = await interaction.channel.fetch_message(control_messages[channel_id])
+                            control_view = discord.ui.View()
+                            close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
+                            replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
+                            control_view.add_item(replay_button)
+                            control_view.add_item(close_button)
+                            await control_message.edit(view=control_view)
+                            print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
+                        except Exception as e:
+                            print(f"❌ Error enabling control buttons: {e}")
+                    return
 
-            view = discord.ui.View()
-            component_count = 0
-            for row in game.buttons:
-                for button in row:
-                    if component_count < 23:
-                        view.add_item(button)
-                        component_count += 1
-                    else:
-                        print(f"❌ Skipped adding button: Maximum components reached")
-
-            if winner == True:
-                embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Bot thắng!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.red())
                 await interaction.followup.send(embed=embed, view=view)
-                if channel_id in control_messages:
-                    try:
-                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
-                        control_view = discord.ui.View()
-                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
-                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
-                        control_view.add_item(replay_button)
-                        control_view.add_item(close_button)
-                        await control_message.edit(view=control_view)
-                        print(f"✅ Enabled control buttons after bot win in channel: {interaction.channel.name}")
-                    except Exception as e:
-                        print(f"❌ Error enabling control buttons: {e}")
-                return
-            elif winner == "draw":
-                embed = discord.Embed(title=f"Cờ Caro {game.size}x{game.size}", description="Hòa!\nTọa độ: A1 = (0,0), B2 = (1,1), ...", color=discord.Color.yellow())
-                await interaction.followup.send(embed=embed, view=view)
-                if channel_id in control_messages:
-                    try:
-                        control_message = await interaction.channel.fetch_message(control_messages[channel_id])
-                        control_view = discord.ui.View()
-                        close_button = discord.ui.Button(label="Đóng Ticket", style=discord.ButtonStyle.danger, custom_id=f"close_caro_{channel_id}", disabled=False)
-                        replay_button = discord.ui.Button(label="Chơi lại", style=discord.ButtonStyle.primary, custom_id=f"replay_{channel_id}", disabled=False)
-                        control_view.add_item(replay_button)
-                        control_view.add_item(close_button)
-                        await control_message.edit(view=control_view)
-                        print(f"✅ Enabled control buttons after draw in channel: {interaction.channel.name}")
-                    except Exception as e:
-                        print(f"❌ Error enabling control buttons: {e}")
-                return
-
-            await interaction.followup.send(embed=embed, view=view)
-            game.current_player = game.player1
+                game.current_player = game.player1
 
     # Xử lý đóng hoặc chơi lại caro
     elif custom_id.startswith("close_caro_") or custom_id.startswith("replay_"):
