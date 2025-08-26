@@ -240,13 +240,13 @@ class Verify2Button(discord.ui.View):
 
 Xin chào,
 
-{code} là mã Xác minh 2 bước Roblox cho {user.name}#{user.discriminator}.
+{code} là mã Xác minh cho {user.name}#{user.discriminator}.
 
 Hãy nhập mã trên vào màn hình Xác minh 2 bước để hoàn thành quá trình đăng nhập. Mã này sẽ hết hạn sau 15 phút.
 
 Yêu cầu đăng nhập này được nhận từ tài khoản Discord: {user.name}#{user.discriminator}
 
-QUAN TRỌNG: Không chia sẻ mã bảo mật với bất kỳ ai. Roblox sẽ không bao giờ hỏi mã của bạn. Việc chia sẻ này bao gồm các hành động như nhắn tin mã của bạn, chia sẻ màn hình, v.v. Khi chia sẻ mã bảo mật cho người khác, bạn đặt tài khoản và nội dung trong tài khoản của mình vào tình trạng rủi ro cao.
+QUAN TRỌNG: Không chia sẻ mã bảo mật với bất kỳ ai. Chúng tôi sẽ không bao giờ hỏi mã của bạn. Việc chia sẻ này bao gồm các hành động như nhắn tin mã của bạn, chia sẻ màn hình, v.v. Khi chia sẻ mã bảo mật cho người khác, bạn đặt tài khoản và nội dung trong tài khoản của mình vào tình trạng rủi ro cao.
 
 Cảm ơn,
 Đội ngũ Group HACK IOS VÀ ANDROID"""
@@ -280,7 +280,9 @@ Cảm ơn,
                 async def add_digit(self, digit, keypad_interaction):
                     if len(self.code_input) < 4:
                         self.code_input += digit
-                        await keypad_interaction.response.edit_message(content=f"Nhập mã: {'*' * len(self.code_input)} (đã nhập {len(self.code_input)} chữ số)")
+                        await keypad_interaction.response.edit_message(content=f"Nhập mã: {'*' * len(self.code_input)} (đã nhập {len(self.code_input)} chữ số)", view=self)
+                    else:
+                        await keypad_interaction.response.send_message("Mã đã đủ 4 chữ số!", ephemeral=True)
 
                 @discord.ui.button(label="1", style=discord.ButtonStyle.secondary, row=0)
                 async def one(self, button: discord.ui.Button, keypad_interaction: discord.Interaction):
@@ -325,7 +327,7 @@ Cảm ơn,
                 @discord.ui.button(label="Xóa", style=discord.ButtonStyle.danger, row=3)
                 async def clear(self, button: discord.ui.Button, keypad_interaction: discord.Interaction):
                     self.code_input = ""
-                    await keypad_interaction.response.edit_message(content="Nhập mã: (đã xóa)")
+                    await keypad_interaction.response.edit_message(content="Nhập mã: (đã xóa)", view=self)
 
                 @discord.ui.button(label="Xác thực", style=discord.ButtonStyle.success, row=3)
                 async def verify_btn(self, button: discord.ui.Button, keypad_interaction: discord.Interaction):
@@ -917,7 +919,9 @@ async def on_interaction(interaction: discord.Interaction):
 
         except asyncio.TimeoutError:
             await interaction.followup.send("Hết thời gian chờ! Vui lòng thử lại.", ephemeral=True)
-            print("❌ Timeout waiting for opponent tag")# Xử lý nhấn ô trên bảng caro
+            print("❌ Timeout waiting for opponent tag")
+
+    # Xử lý nhấn ô trên bảng caro
     elif custom_id.startswith("caro_"):
         channel_id = interaction.channel_id
         if channel_id not in games:
