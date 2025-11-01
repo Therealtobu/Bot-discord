@@ -469,7 +469,7 @@ async def on_ready():
 # -------------------------
 # Cập nhật số thành viên & online
 # -------------------------
-@tasks.loop(minutes=1)
+@tasks.loop(minutes=5)
 async def update_member_count():
     guild = bot.get_guild(GUILD_ID)
     if not guild:
@@ -584,21 +584,28 @@ async def mute_and_log(message, reason="vi phạm", mute_time=900):
 # On Message (Filter + Anti-Spam + Verify Limit)
 # -------------------------
 user_messages = {}
-
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
+    # Kiểm tra tin nhắn DM
+    if message.guild is None:
+        logging.debug(f"Tin nhắn từ {message.author} trong DM, bỏ qua xử lý guild.")
+        await bot.process_commands(message)
+        return
+
     guild = message.guild
     member = guild.get_member(message.author.id)
+    if member is None:
+        logging.error(f"Không tìm thấy thành viên {message.author.id} trong guild {guild.name}")
+        return
+
     role1 = guild.get_role(ROLE1_ID)
     role2 = guild.get_role(ROLE2_ID)
 
     # Xử lý giới hạn tin nhắn cho role bậc 1
-    if role2 in member.roles:
-        pass  # Không giới hạn
-    elif role1 in member.roles:
+    if role2 not in member.roles and role1 in member.roles:
         user_id = message.author.id
         now = datetime.now()
 
@@ -607,13 +614,14 @@ async def on_message(message):
             if delta.total_seconds() < 60:
                 await message.delete()
                 await message.author.send("Bạn cần xác thực mức 2 để có thể không giới hạn lượt nhắn và tham gia vào nhóm thoại.")
+                logging.info(f"Đã xóa tin nhắn của {member.name} do giới hạn Verify Bậc 1")
                 return
 
         last_messages[user_id] = now
 
     content_lower = message.content.lower()
 
-    # Extract URLs and check bad words only in non-URL parts
+    # Kiểm tra từ cấm và link cấm
     urls = re.findall(r'(https?://\S+)', message.content)
     non_url_content = re.sub(r'https?://\S+', '', content_lower)
     has_bad_word = any(bad_word in non_url_content for bad_word in BAD_WORDS)
@@ -626,6 +634,7 @@ async def on_message(message):
         await mute_and_log(message, "gửi link bị cấm", MUTE_TIME_LINK)
         return
 
+    # Kiểm tra spam
     now = datetime.now(timezone.utc)
     uid = message.author.id
     if uid not in user_messages:
@@ -638,8 +647,7 @@ async def on_message(message):
         user_messages[uid] = []
         return
 
-    # Kiểm tra thành viên mới gửi tin nhắn đáng ngờ
-    member = message.author
+    # Kiểm tra thành viên mới
     if member.joined_at and (now - member.joined_at) < timedelta(days=1):
         has_suspicious_word = any(word in content_lower for word in SUSPICIOUS_WORDS)
         if has_suspicious_word:
@@ -658,9 +666,9 @@ async def on_message(message):
                     overwrite=None,
                     reason="Khôi phục quyền mặc định"
                 )
-                print(f"✅ Đã gửi cảnh báo thành viên mới trong kênh {message.channel.name} cho {member.name}")
+                logging.info(f"Đã gửi cảnh báo thành viên mới trong kênh {message.channel.name} cho {member.name}")
             except Exception as e:
-                print(f"❌ Lỗi khi gửi cảnh báo thành viên mới: {e}")
+                logging.error(f"Lỗi khi gửi cảnh báo thành viên mới: {e}", exc_info=True)
 
     await bot.process_commands(message)
 
