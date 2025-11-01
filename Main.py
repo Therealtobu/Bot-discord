@@ -256,7 +256,7 @@ Cảm ơn,
             email_msg['To'] = email
 
             try:
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                with smtplib.SMTP_SSL('smtp.gmail.com', 587) as server:
                     server.login(SENDER_EMAIL, SENDER_PASSWORD)
                     server.sendmail(SENDER_EMAIL, email, email_msg.as_string())
                 await user.send("Đã gửi mã xác thực đến email của bạn. Vui lòng kiểm tra hộp thư (bao gồm cả mục Spam) và nhập mã vào đây trong vòng 15 phút.")
